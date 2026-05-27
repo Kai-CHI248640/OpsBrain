@@ -1,0 +1,18 @@
+#
+# TextFSM template: Cisco show mac address-table
+#
+Value VLAN (\d+)
+Value MAC ([0-9a-fA-F]+\.?[0-9a-fA-F]+\.?[0-9a-fA-F]+)
+Value TYPE (\S+)
+Value PORTS (.+)
+
+Start
+  ^vlan\s+mac\s+address\s+type\s+protocols -> Table
+  ^Vlan\s+Mac\s+Address\s+Type\s+Ports -> Table
+  ^All\s+Types: -> Continue
+  ^Addresses\s+in\s+this\s+table: -> Continue
+  ^Total\s+Mac\s+Addresses: -> Continue
+
+Table
+  ^\s*${VLAN}\s+${MAC}\s+${TYPE}\s+${PORTS} -> Record
+  ^\s*${VLAN}\s+${MAC}\s+${TYPE}\s+[A-Z]+\s+${PORTS} -> Record

@@ -1,0 +1,28 @@
+#
+# TextFSM template: Cisco show lldp neighbors detail
+#
+# Parses detailed LLDP neighbor information on Cisco IOS/IOS-XE.
+#
+Value LOCAL_PORT (\S+)
+Value NEIGHBOR_ID (\S+)
+Value NEIGHBOR_PORT (\S+)
+Value PLATFORM (.+)
+Value VLAN (\d+)
+Value SPEED (\d+)
+
+Start
+  ^Local\s+Intf:\s+${LOCAL_PORT} -> Neighbor
+
+Neighbor
+  ^System\s+Name:\s+${NEIGHBOR_ID}
+  ^Port\s+id:\s+${NEIGHBOR_PORT}
+  ^Platform:\s+${PLATFORM}
+  ^System\s+Description: -> Continue
+  ^Port\s+Description: -> Continue
+  ^VLAN\s+id:\s+${VLAN}
+  ^Maximum\s+Frame\s+Size: -> Continue
+  ^Management\s+Addresses: -> Continue
+  ^Auto\s+Negotiation: -> Continue
+  ^Physical\s+Media\s+Capabilities: -> Continue
+  ^Media\s+Attachment\s+Unit\s+type: -> Continue
+  ^--.+ -> Record Start

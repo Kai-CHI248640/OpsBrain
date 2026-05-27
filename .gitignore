@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+.venv/
+venv/
+
+# Node
+node_modules/
+.next/
+
+# IDE
+.vscode/
+.idea/
+
+# Docker
+*.log
+
+# Environment
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# OpsBrain - temp/debug scripts (keep under scripts/)
+check_*.py
+debug_*.py
+deploy_*.py
+fix_*.py
+verify_*.py
+rebuild*.py
+restart*.py
+reset*.py
+_*.py
+quick_*.py
+force_*.py
+final_*.py
+switch_*.py
+sdk_*.py
+ssh_*.py
+find_*.py
+diag*.py
+test_*.py
+upload_*.py
+full_test.py
+backup*.py
+*_check.py

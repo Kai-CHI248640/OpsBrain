@@ -1,0 +1,47 @@
+# OpsBrain OOBM — Vendor Commands Configuration
+# 可覆盖内置默认命令集
+#
+# 格式: vendor_name:
+#   label: 显示名称
+#   enter_privilege: 进入特权模式的命令
+#   exit_privilege: 退出特权模式
+#   commands:
+#     command_key: "实际发送的命令"
+
+cisco:
+  label: "Cisco IOS/IOS-XE"
+  enter_privilege: "enable"
+  commands:
+    lldp_neighbors: "show lldp neighbors detail"
+    cdp_neighbors: "show cdp neighbors detail"
+    arp_table: "show arp"
+    mac_table: "show mac address-table"
+    ip_route: "show ip route"
+    interfaces_ip: "show ip interface brief"
+    interfaces_desc: "show interfaces description"
+    vlan: "show vlan brief"
+    version: "show version"
+
+huawei:
+  label: "华为 VRP"
+  enter_privilege: "system-view"
+  commands:
+    lldp_neighbors: "display lldp neighbor-information"
+    arp_table: "display arp"
+    mac_table: "display mac-address"
+    ip_route: "display ip routing-table"
+    interfaces_ip: "display ip interface brief"
+    vlan: "display vlan"
+    version: "display version"
+
+h3c:
+  label: "H3C Comware"
+  enter_privilege: "system-view"
+  commands:
+    lldp_neighbors: "display lldp neighbor-information"
+    arp_table: "display arp"
+    mac_table: "display mac-address"
+    ip_route: "display ip routing-table"
+    interfaces_ip: "display ip interface brief"
+    vlan: "display vlan"
+    version: "display version"

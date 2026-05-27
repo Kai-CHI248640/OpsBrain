@@ -1,0 +1,48 @@
+# OpsBrain OOBM — 采集器配置文件
+
+# ─── 数据目录 ──────────────────────────────────────────────────────
+data_dirs:
+  inventory: "/var/lib/opsbrain/inventory"
+  collected: "/var/lib/opsbrain/collected"
+  parsed: "/var/lib/opsbrain/parsed"
+  topology: "/var/lib/opsbrain/topology"
+
+# ─── SSH 配置 ──────────────────────────────────────────────────────
+ssh:
+  timeout: 30
+  banner_timeout: 10
+  command_timeout: 15
+  device_timeout: 90
+  enable_timeout: 10
+  retries: 2
+  backoff_strategy: "exponential_jitter"
+  # 退避基础延迟（秒）
+  backoff_base_delay: 2.0
+  # 压缩传输
+  compress: true
+  # 禁用 agent 和 key 认证（仅密码认证）
+  allow_agent: false
+  look_for_keys: false
+
+# ─── 并发配置 ──────────────────────────────────────────────────────
+concurrency:
+  # Worker 数量（自动取 min(配置值, cpu*3)）
+  max_workers: 10
+  # 设备间采集延迟（秒，避免串口服务器压力）
+  inter_device_delay: 0.1
+
+# ─── 发现配置 ──────────────────────────────────────────────────────
+discovery:
+  # 最大 LLDP 发现轮数
+  max_rounds: 3
+  # 自动发现新设备
+  auto_discover: true
+  # 新设备等待超时（秒）—— 等待新设备登记到清单
+  new_device_timeout: 300
+
+# ─── 健康检查 ──────────────────────────────────────────────────────
+healthcheck:
+  # 健康检查 HTTP 端口
+  port: 9100
+  # 健康检查路径
+  path: "/healthz"

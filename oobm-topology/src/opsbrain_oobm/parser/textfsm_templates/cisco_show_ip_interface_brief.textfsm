@@ -1,0 +1,19 @@
+#
+# TextFSM template: Cisco show ip interface brief
+#
+Value INTERFACE (\S+)
+Value IP (\S+)
+Value METHOD (\S+)
+Value STATUS (.+)
+Value PROTOCOL (\S+)
+
+Start
+  ^Interface\s+IP-Address\s+OK\?\s+Method\s+Status\s+Protocol -> Table
+  ^Port\s+Vlan\s+Type\s+Mode\s+Description\s+Status\s+Speed\s+Duplex\s+Neighbor -> Table2
+
+Table
+  ^${INTERFACE}\s+${IP}\s+\S+\s+${METHOD}\s+${STATUS}\s+${PROTOCOL} -> Record
+  ^${INTERFACE}\s+unassigned\s+\S+\s+${METHOD}\s+${STATUS}\s+${PROTOCOL} -> Record
+
+Table2
+  ^.* -> Error

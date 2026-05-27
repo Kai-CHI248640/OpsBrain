@@ -1,0 +1,6 @@
+# OpsBrain Web Docker ignore
+node_modules
+dist
+.git
+*.md
+.DS_Store

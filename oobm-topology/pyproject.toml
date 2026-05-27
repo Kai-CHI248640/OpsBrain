@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "opsbrain-oobm"
+version = "0.1.0"
+description = "OOBM Network Topology Discovery — Agent-driven network topology auto-discovery via console servers"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+
+authors = [
+  { name = "OpsBrain Team" },
+]
+
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: System Administrators",
+  "Topic :: System :: Networking :: Monitoring",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+  "paramiko>=3.4",
+  "openpyxl>=3.1",
+  "pydantic>=2.5",
+  "pydantic-settings>=2.1",
+  "pyyaml>=6.0",
+  "textfsm>=1.1",
+  "click>=8.1",
+  "rich>=13.7",
+  "python-dateutil>=2.8",
+  "orjson>=3.9",
+  "httpx>=0.27",
+  "openai>=1.50",  # 可选，更完善的 OpenAI 客户端
+]
+
+[project.scripts]
+opsbrain-oobm = "opsbrain_oobm.cli:cli"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["opsbrain_oobm*"]
+
+[tool.setuptools.package-data]
+"opsbrain_oobm.parser" = ["textfsm_templates/*.textfsm"]
+
+[tool.setuptools.data-files]
+"config" = ["config/*.yml", "config/*.yaml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --tb=short"
+
+[tool.coverage.run]
+source = ["opsbrain_oobm"]
+omit = ["*/tests/*"]

@@ -1,0 +1,34 @@
+#
+# TextFSM template: Cisco show cdp neighbors detail
+#
+# Parses detailed CDP neighbor information on Cisco IOS/IOS-XE.
+#
+Value LOCAL_PORT (\S+)
+Value NEIGHBOR_ID (\S+)
+Value NEIGHBOR_PORT (\S+)
+Value PLATFORM (.+)
+Value IP (\d+\.\d+\.\d+\.\d+)
+Value VERSION (.+)
+
+Start
+  ^Device\s+ID:\s+${NEIGHBOR_ID} -> Entry
+
+Entry
+  ^\s+Interface:\s+${LOCORT},\s+Port\s+ID\s+\(outgoing\s+port\):\s+${NEIGHBOR_PORT}
+  ^\s+Interface:\s+${LOCAL_PORT}, -> EntryPort
+  ^Platform:\s+${PLATFORM},
+  ^\s+IP\s+address:\s+${IP}
+  ^Version\s+: -> VersonBlock
+  ^--.+ -> Record
+
+EntryPort
+  ^Port\s+ID\s+\(outgoing\s+port\):\s+${NEIGHBOR_PORT}
+  ^Platform:\s+${PLATFORM},
+  ^\s+IP\s+address:\s+${IP}
+  ^Version\s+: -> VersionBlock
+  ^--.+ -> Record
+
+VersionBlock
+  ^\s+${VERSION}
+  ^--.+ -> Record Start
+  ^Device\s+ID:\s+${NEIGHBOR_ID} -> Entry

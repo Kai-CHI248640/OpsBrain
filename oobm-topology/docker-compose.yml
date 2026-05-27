@@ -1,0 +1,172 @@
+# ============================================================================
+# OpsBrain — Docker Compose
+# ============================================================================
+# 架构:
+#   用户 → :80               → nginx（反向代理）
+#       /opsbrain/            → 前端静态文件
+#       /opsbrain/api/        → web:8000（FastAPI 后端）
+#   带内:                    → collector（SSH 采集引擎）
+#   可选:                    → topology-builder（拓扑构建）
+# ============================================================================
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+
+  # ─── 反向代理 + 前端 ─────────────────────────────────────────────
+  nginx:
+    image: opsbrain/opsbrain-nginx:${OPSBRAIN_VERSION:-latest}
+    build:
+      context: ../web
+      dockerfile: nginx/Dockerfile
+    container_name: opsbrain-nginx
+    hostname: opsbrain-nginx
+    restart: unless-stopped
+    ports:
+      - "${OPSBRAIN_PORT:-80}:80"
+    depends_on:
+      web:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80/opsbrain/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging: *default-logging
+    networks:
+      - oobm-net
+
+  # ─── Web 后端（FastAPI） ─────────────────────────────────────────
+  web:
+    image: opsbrain/opsbrain-web:${OPSBRAIN_VERSION:-latest}
+    build:
+      context: ../web/backend
+      dockerfile: Dockerfile
+    container_name: opsbrain-web
+    hostname: opsbrain-web
+    restart: unless-stopped
+    expose:
+      - "8000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      OPSBRAIN_HOME: /var/lib/opsbrain
+      OPSBRAIN_LOG_FORMAT: ${OPSBRAIN_LOG_FORMAT:-json}
+      OPSBRAIN_JWT_SECRET: ${OPSBRAIN_JWT_SECRET:-change-me-in-production}
+      OOBM_SRC_PATH: /opt/oobm-topology/src
+      OPSBRAIN_ROLE: web
+      OPSBRAIN_OUTPUT_FORMATS: '["json", "dot", "mermaid"]'
+      OPSBRAIN_PIPELINE_MODE: full
+      OPSBRAIN_INVENTORY_FILE: /etc/opsbrain/device-inventory.xlsx
+      OPSBRAIN_INVENTORY_OUTPUT: /var/lib/opsbrain/inventory/devices.json
+      OPSBRAIN_COLLECTED_DIR: /var/lib/opsbrain/collected
+      OPSBRAIN_PARSED_DIR: /var/lib/opsbrain/parsed
+      OPSBRAIN_OUTPUT_DIR: /var/lib/opsbrain/topology
+      OPSBRAIN_CONFIG: /etc/opsbrain
+      OPSBRAIN_MODEL_ENABLED: "false"
+      OPSBRAIN_VALIDATE_STRICT: "false"
+    volumes:
+      - type: bind
+        source: ./data
+        target: /var/lib/opsbrain
+        consistency: delegated
+      - type: bind
+        source: ./src
+        target: /opt/oobm-topology/src
+        read_only: true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/auth/setup-required"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    logging: *default-logging
+    networks:
+      - oobm-net
+
+  # ─── 采集器（SSH Console） ──────────────────────────────────────
+  collector:
+    image: opsbrain/oobm-collector:${OPSBRAIN_VERSION:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: opsbrain-oobm-collector
+    hostname: oobm-collector
+    restart: "no"
+    profiles:
+      - collector
+    depends_on:
+      nginx:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      OPSBRAIN_ROLE: collector
+      OPSBRAIN_PIPELINE_MODE: ${OPSBRAIN_PIPELINE_MODE:-full}
+      OPSBRAIN_LOG_LEVEL: ${OPSBRAIN_LOG_LEVEL:-info}
+      OPSBRAIN_LOG_FORMAT: ${OPSBRAIN_LOG_FORMAT:-json}
+      OPSBRAIN_WORKERS: ${OPSBRAIN_WORKERS:-10}
+      OPSBRAIN_SSH_TIMEOUT: ${OPSBRAIN_SSH_TIMEOUT:-30}
+      OPSBRAIN_SSH_RETRIES: ${OPSBRAIN_SSH_RETRIES:-2}
+      OPSBRAIN_INVENTORY_FILE: /etc/opsbrain/device-inventory.xlsx
+      OPSBRAIN_INVENTORY_OUTPUT: /var/lib/opsbrain/inventory/devices.json
+    volumes:
+      - type: bind
+        source: ./data
+        target: /var/lib/opsbrain
+        consistency: delegated
+      - type: bind
+        source: ./inventory/device-inventory.xlsx
+        target: /etc/opsbrain/device-inventory.xlsx
+        read_only: true
+    logging: *default-logging
+    networks:
+      - oobm-net
+    extra_hosts:
+      - "console-server:${CONSOLE_SERVER_IP:-10.0.0.100}"
+
+  # ─── 拓扑构建器（一次性） ────────────────────────────────────────
+  topology-builder:
+    image: opsbrain/oobm-topology-builder:${OPSBRAIN_VERSION:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: opsbrain-oobm-topology
+    hostname: oobm-topology
+    restart: "no"
+    profiles:
+      - topology
+    depends_on:
+      collector:
+        condition: service_completed_successfully
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      OPSBRAIN_ROLE: topology-builder
+      OPSBRAIN_PIPELINE_MODE: topology
+      OPSBRAIN_LOG_LEVEL: ${OPSBRAIN_LOG_LEVEL:-info}
+      OPSBRAIN_LOG_FORMAT: ${OPSBRAIN_LOG_FORMAT:-json}
+      OPSBRAIN_COLLECTED_DIR: /var/lib/opsbrain/collected
+      OPSBRAIN_OUTPUT_DIR: /var/lib/opsbrain/topology
+      OPSBRAIN_OUTPUT_FORMATS: ${OPSBRAIN_OUTPUT_FORMATS:-json,dot,mermaid}
+    volumes:
+      - type: bind
+        source: ./data
+        target: /var/lib/opsbrain
+        consistency: delegated
+    logging: *default-logging
+    networks:
+      - oobm-net
+
+networks:
+  oobm-net:
+    name: opsbrain-oobm-net
+    driver: bridge
