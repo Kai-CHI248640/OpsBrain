@@ -1,0 +1,53 @@
+Business Source License 1.1
+
+License text copyright © 2017 MariaDB Corporation Ab, All Rights Reserved.
+"Business Source License" is a trademark of MariaDB Corporation Ab.
+
+---
+
+Parameters
+
+Licensor:             zhangxiangyue
+
+Licensed Work:        OpsBrain — AI Network Operations Platform
+                      The Licensed Work is (c) 2026 zhangxiangyue
+
+Additional Use Grant: You may use the Licensed Work for any non-production
+                      purpose, including but not limited to personal use,
+                      educational use, evaluation, and internal testing.
+                      You may also use the Licensed Work in production if
+                      you are an individual or an organization with fewer
+                      than 50 employees and less than US $1,000,000 in
+                      annual revenue.
+
+Change Date:          2029-05-27
+
+Change License:       MIT License
+
+---
+
+Notice
+
+The Business Source License (this document, or the "License") is not an Open
+Source license. However, the Licensed Work will eventually be made available
+under an Open Source license, as stated in this License.
+
+For full license text and terms, see:
+https://spdx.org/licenses/BUSL-1.1.html
+
+Summary:
+
+🟢 You MAY use the Licensed Work for:
+   - Personal / non-production use
+   - Educational and research purposes
+   - Internal testing and evaluation
+   - Organizations under 50 employees and $1M annual revenue
+
+🔴 You MAY NOT use the Licensed Work for production/commercial purposes
+   without a separate commercial license from the Licensor, unless you
+   qualify under the Additional Use Grant above.
+
+⏰ On 2029-05-27, this license automatically converts to the MIT License,
+   at which point all use restrictions are removed.
+
+For commercial licensing inquiries, contact: zhangxiangyue

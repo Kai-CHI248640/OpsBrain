@@ -5,7 +5,7 @@
 [![Python](https://img.shields.io/badge/Python-3.12+-brightgreen?logo=python)](https://python.org)
 [![Vue 3](https://img.shields.io/badge/Vue-3.x-brightgreen?logo=vue.js)](https://vuejs.org)
 [![Docker](https://img.shields.io/badge/Docker-Compose-blue?logo=docker)](https://docs.docker.com/compose/)
-[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+[![License](https://img.shields.io/badge/License-BSL_1.1-blue)](LICENSE)
 
 ---
 
@@ -134,4 +134,4 @@ make init && make run
 
 ## License
 
-MIT © zhangxiangyue
+BSL 1.1 → MIT (2029-05-27) © zhangxiangyue
