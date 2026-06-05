@@ -117,7 +117,7 @@ Host network 会让后端直接访问宿主机网络栈，请只在可信的管�
 
 ```bash
 # 1. 克隆
-git clone https://github.com/zhangxiangyue/opsbrain.git
+git clone https://github.com/Kai-CHI248640/OpsBrain.git
 cd opsbrain
 
 # 2. 启动 Web 平台
