@@ -180,18 +180,30 @@ const chatRef = ref(null)
 
 // ── 统计 ──
 const stats = reactive({ topology_count: 0, faulty_devices: 0, api_status: {}, subagent_tasks: {} })
-const apiHealthy = ref(true)
+const apiState = ref({ configured: false, checking: true, healthy: null })
 
 const statCards = computed(() => [
   { title: '拓扑数量', value: stats.topology_count ?? '--', icon: Connection, color: '#409EFF',
     clickable: true, click: () => router.push('/topology') },
   { title: '故障设备', value: stats.faulty_devices ?? '--', icon: Warning, color: '#F56C6C',
     warn: (stats.faulty_devices ?? 0) > 0 },
-  { title: 'API 状态', value: apiHealthy.value ? '正常' : '异常', icon: Aim, color: '#67C23A',
+  { title: 'API 状态', value: apiStatusText.value, icon: Aim, color: apiStatusColor.value,
     clickable: true, click: () => router.push('/settings') },
   { title: 'Subagent 任务', value: `${stats.subagent_tasks?.working ?? 0} 工作中 / ${stats.subagent_tasks?.total ?? 0} 总计`,
     icon: ChatDotRound, color: '#E6A23C' },
 ])
+
+const apiStatusText = computed(() => {
+  if (!apiState.value.configured) return '未配置'
+  if (apiState.value.checking) return '检测中'
+  return apiState.value.healthy ? '正常' : '异常'
+})
+
+const apiStatusColor = computed(() => {
+  if (!apiState.value.configured) return '#909399'
+  if (apiState.value.checking) return '#E6A23C'
+  return apiState.value.healthy ? '#67C23A' : '#F56C6C'
+})
 
 // ── Subagent 监控 ──
 const subagents = ref([])
@@ -342,7 +354,10 @@ let chatPoll = null
 const localInfo = reactive({ hostname: '', cpu: {}, memory: {}, network: {}, disk: {} })
 
 async function refreshStats() {
-  try { Object.assign(stats, (await api.get('/dashboard/stats')).data) } catch {}
+  try {
+    Object.assign(stats, (await api.get('/dashboard/stats')).data)
+    apiState.value.configured = stats.api_status?.configured ?? (stats.api_status?.total > 0)
+  } catch {}
 }
 
 async function loadLocalInfo() {
@@ -389,7 +404,16 @@ onMounted(async () => {
   loadHistory()
   await syncChatHistory()  // 首次从服务器同步
   try { Object.assign(stats, (await api.get('/dashboard/stats')).data) } catch {}
-  try { const h = await api.get('/dashboard/api-health'); apiHealthy.value = h.data.total > 0 ? h.data.unhealthy === 0 : true } catch {}
+  apiState.value.configured = stats.api_status?.configured ?? (stats.api_status?.total > 0)
+  try {
+    const h = await api.get('/dashboard/api-health')
+    apiState.value.configured = h.data.total > 0
+    apiState.value.healthy = h.data.total > 0 ? h.data.unhealthy === 0 : null
+  } catch {
+    apiState.value.healthy = false
+  } finally {
+    apiState.value.checking = false
+  }
   loadSubagents()
   loadLocalInfo()
   slowPoll = setInterval(() => { loadSubagents(); refreshStats(); loadLocalInfo(); syncChatHistory() }, 15000)

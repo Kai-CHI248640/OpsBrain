@@ -66,7 +66,12 @@ async def get_stats_data() -> dict:
     return {
         "topology_count": topology_count,
         "faulty_devices": faulty_devices,
-        "api_status": {"total": total_apis, "healthy": 0, "unhealthy": 0},
+        "api_status": {
+            "total": total_apis,
+            "healthy": None,
+            "unhealthy": None,
+            "configured": total_apis > 0,
+        },
         "subagent_tasks": {
             "working": working_subagents,
             "idle": total_subagents - working_subagents,
@@ -191,9 +196,94 @@ async def get_local_info() -> dict:
     }
 
 
+def get_network_runtime_data() -> dict:
+    """Describe whether the backend can see the host network.
+
+    Docker bridge mode usually exposes only container/private bridge subnets
+    such as 172.17.0.0/16. ARP/LLDP/CDP-style discovery needs host networking
+    or a collector installed directly on a machine inside the target LAN.
+    """
+    import os
+    import ipaddress
+
+    subnets = _detect_visible_subnets()
+    private_bridge_prefixes = ("172.17.", "172.18.", "172.19.")
+    bridge_like = False
+    host_like = False
+
+    for subnet in subnets:
+        try:
+            net = ipaddress.ip_network(subnet, strict=False)
+        except ValueError:
+            continue
+        if str(net.network_address).startswith(("172.17.", "172.18.", "172.19.")):
+            bridge_like = True
+        elif net.is_private and not str(net.network_address).startswith("127."):
+            host_like = True
+
+    cgroup_text = ""
+    try:
+        with open("/proc/1/cgroup", "r", encoding="utf-8", errors="ignore") as fh:
+            cgroup_text = fh.read()
+    except Exception:
+        pass
+
+    in_container = (
+        os.path.exists("/.dockerenv")
+        or "docker" in cgroup_text
+        or "kubepods" in cgroup_text
+        or "containerd" in cgroup_text
+    )
+    mode = "host" if in_container and host_like and not bridge_like else "bridge" if in_container else "bare-metal"
+    can_sniff_lan = mode in ("host", "bare-metal")
+
+    return {
+        "in_container": in_container,
+        "mode": mode,
+        "can_sniff_lan": can_sniff_lan,
+        "detected_subnets": subnets,
+        "warning": "" if can_sniff_lan else (
+            "当前后端看起来运行在 Docker bridge 网络中，自动嗅探大概率只能看到容器网段。"
+            "如需发现真实局域网，请使用 host network 部署采集器，或改用种子发现/Console Server/Excel 导入。"
+        ),
+    }
+
+
+def _detect_visible_subnets() -> list[str]:
+    """Read Linux routing table and return subnets visible to this process."""
+    import ipaddress
+    import socket
+    import struct
+
+    subnets: list[str] = []
+    try:
+        with open("/proc/net/route", "r", encoding="utf-8", errors="ignore") as fh:
+            next(fh, None)
+            for line in fh:
+                parts = line.split()
+                if len(parts) < 8:
+                    continue
+                dest_hex, mask_hex = parts[1], parts[7]
+                if dest_hex == "00000000" or mask_hex == "00000000":
+                    continue
+                dest = socket.inet_ntoa(struct.pack("<L", int(dest_hex, 16)))
+                mask = socket.inet_ntoa(struct.pack("<L", int(mask_hex, 16)))
+                net = ipaddress.IPv4Network(f"{dest}/{mask}", strict=False)
+                if not str(net.network_address).startswith("127."):
+                    subnets.append(str(net))
+    except Exception:
+        pass
+    return list(dict.fromkeys(subnets))
+
+
 @dashboard_router.get("/local-info")
 async def local_info(user: User = Depends(get_current_user)):
     return await get_local_info()
+
+
+@dashboard_router.get("/network-runtime")
+async def network_runtime(user: User = Depends(get_current_user)):
+    return get_network_runtime_data()
 
 
 # ─── 知识库 API ─────────────────────────────────────────────────────

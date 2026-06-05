@@ -87,6 +87,21 @@ opsbrain/
 
 四种模式可**任意组合**——先导入 Excel 台账，再用种子发现补全 LLDP 链路。
 
+### Docker 下的真实网络嗅探
+
+如果 OpsBrain 运行在默认 Docker bridge 网络里，后端看到的通常是容器网段（例如 `172.17.0.0/16`），而不是宿主机所在的真实办公网。因此：
+
+- `种子发现`、`Console Server`、`Excel 导入` 不依赖二层广播，适合普通 Docker 部署。
+- `局域网嗅探` 可以扫描显式填写且可路由的网段，但自动网段识别、ARP 类发现需要后端直接看到宿主机网卡。
+- 要在 Linux 主机上嗅探真实局域网，使用 host network 覆盖配置：
+
+```bash
+cd oobm-topology
+docker compose -f docker-compose.yml -f docker-compose.hostscan.yml up -d nginx web
+```
+
+Host network 会让后端直接访问宿主机网络栈，请只在可信的管理主机或管理 VLAN 中使用。
+
 ## 支持的厂商
 
 | 厂商 | LLDP | CDP | ARP | MAC | 路由 | 接口 |

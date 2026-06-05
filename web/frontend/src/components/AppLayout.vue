@@ -60,7 +60,14 @@ let pollTimer = null
 
 async function fetchStats() { try { Object.assign(stats, (await api.get('/dashboard/stats')).data) } catch {} }
 async function checkApiHealth() {
-  try { const d = (await api.get('/dashboard/api-health')).data; apiConfigured.value = d.total > 0; apiHealthy.value = d.total > 0 ? d.unhealthy === 0 : null } catch { apiHealthy.value = false }
+  try {
+    const d = (await api.get('/dashboard/api-health')).data
+    apiConfigured.value = d.total > 0
+    apiHealthy.value = d.total > 0 ? d.unhealthy === 0 : null
+  } catch {
+    apiConfigured.value = stats.api_status?.configured ?? false
+    apiHealthy.value = apiConfigured.value ? false : null
+  }
 }
 async function refreshAll() { await Promise.all([fetchStats(), checkApiHealth()]) }
 function toggleCollapse() { collapsed.value = !collapsed.value }

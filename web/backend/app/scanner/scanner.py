@@ -43,21 +43,21 @@ def get_local_subnets() -> list[str]:
     """检测本机所有活跃网卡的子网（需要 host 网络模式）"""
     subnets = []
     try:
-        import netifaces
-        for iface in netifaces.interfaces():
-            addrs = netifaces.ifaddresses(iface)
-            if netifaces.AF_INET not in addrs:
-                continue
-            for a in addrs[netifaces.AF_INET]:
-                ip = a.get("addr", "")
-                mask = a.get("netmask", "")
-                if ip and mask and not ip.startswith("127."):
-                    try:
-                        net = ipaddress.IPv4Network(f"{ip}/{mask}", strict=False)
-                        subnets.append(str(net))
-                    except Exception:
-                        pass
-    except ImportError:
+        with open("/proc/net/route", "r", encoding="utf-8", errors="ignore") as fh:
+            next(fh, None)
+            for line in fh:
+                parts = line.split()
+                if len(parts) < 8:
+                    continue
+                dest_hex, mask_hex = parts[1], parts[7]
+                if dest_hex == "00000000" or mask_hex == "00000000":
+                    continue
+                dest = socket.inet_ntoa(struct.pack("<L", int(dest_hex, 16)))
+                mask = socket.inet_ntoa(struct.pack("<L", int(mask_hex, 16)))
+                net = ipaddress.IPv4Network(f"{dest}/{mask}", strict=False)
+                if not str(net.network_address).startswith("127."):
+                    subnets.append(str(net))
+    except Exception:
         pass
     # Fallback
     if not subnets:

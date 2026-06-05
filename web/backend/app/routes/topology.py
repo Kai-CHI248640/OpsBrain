@@ -15,6 +15,7 @@ from sqlalchemy import select
 from ..auth import get_current_user
 from ..database import async_session
 from ..models import User, TopologySave, Subagent, ApiKey
+from .dashboard import get_network_runtime_data
 
 from logging_setup import get_logger
 
@@ -161,22 +162,24 @@ def _detect_local_subnets() -> list[str]:
     """自动检测本机所有网卡上的子网段"""
     subnets: list[str] = []
     try:
-        import netifaces
-        for iface in netifaces.interfaces():
-            addrs = netifaces.ifaddresses(iface)
-            if netifaces.AF_INET not in addrs:
-                continue
-            for addr_info in addrs[netifaces.AF_INET]:
-                ip = addr_info.get("addr", "")
-                netmask = addr_info.get("netmask", "")
-                if ip and netmask and not ip.startswith("127."):
-                    try:
-                        import ipaddress
-                        net = ipaddress.IPv4Network(f"{ip}/{netmask}", strict=False)
-                        subnets.append(str(net))
-                    except Exception:
-                        pass
-    except ImportError:
+        import ipaddress
+        import socket
+        import struct
+        with open("/proc/net/route", "r", encoding="utf-8", errors="ignore") as fh:
+            next(fh, None)
+            for line in fh:
+                parts = line.split()
+                if len(parts) < 8:
+                    continue
+                dest_hex, mask_hex = parts[1], parts[7]
+                if dest_hex == "00000000" or mask_hex == "00000000":
+                    continue
+                dest = socket.inet_ntoa(struct.pack("<L", int(dest_hex, 16)))
+                mask = socket.inet_ntoa(struct.pack("<L", int(mask_hex, 16)))
+                net = ipaddress.IPv4Network(f"{dest}/{mask}", strict=False)
+                if not str(net.network_address).startswith("127."):
+                    subnets.append(str(net))
+    except Exception:
         pass
     # 去重
     return list(dict.fromkeys(subnets))
@@ -264,6 +267,8 @@ async def run_discovery(data: dict):
 
         # 深度嗅探：尝试 SSH 获取设备信息
         links, analysis = [], ""
+        runtime = get_network_runtime_data()
+
         if devices and password:
             for dev in devices[:5]:
                 if dev["loginMethod"] == "ssh":
@@ -296,6 +301,8 @@ async def run_discovery(data: dict):
             analysis = f"扫描完成，发现 {len(devices)} 台设备（扫描了 {len(hosts)} 个IP，网段: {subnet_info}）"
             if not password:
                 analysis += "，未提供密码无法深度嗅探"
+        if runtime.get("warning"):
+            analysis += f"。提示：{runtime['warning']}"
 
         # 拓扑名不再直接用 target 网段
         from datetime import datetime
@@ -338,6 +345,8 @@ async def run_discovery(data: dict):
             "name": name,
             "device_count": len(devices),
             "link_count": len(links),
+            "runtime": runtime,
+            "analysis": analysis,
             "devices": [{"name": d.get("name","?"), "type": d.get("type","?"),
                          "ip": d.get("ip","?"), "vendor": d.get("vendor","?")} for d in devices[:10]],
         }
@@ -426,6 +435,10 @@ async def run_network_scan(data: dict):
             snmp_community=snmp_community,
         )
         result = await scanner.scan()
+        runtime = get_network_runtime_data()
+        result["runtime"] = runtime
+        if runtime.get("warning"):
+            result["analysis"] = f"{result.get('analysis', '')}。提示：{runtime['warning']}"
         
         # 保存
         async with async_session() as session:

@@ -1,0 +1,34 @@
+# Optional override for real LAN sniffing.
+#
+# Use this only on a Linux host that is connected to the target network:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.hostscan.yml up -d nginx web
+#
+# Why this exists:
+# Docker bridge mode hides the physical L2/L3 network from the backend. TCP
+# probes can still reach routed IPs if you type a subnet explicitly, but
+# automatic subnet detection and ARP-style discovery will mostly see Docker
+# bridge ranges such as 172.17.0.0/16. Host networking lets the backend inspect
+# the host interfaces directly.
+#
+# Security note:
+# Host networking gives the backend direct access to the host network stack.
+# Run it only on a trusted OpsBrain node, ideally inside the management VLAN.
+
+services:
+  web:
+    network_mode: host
+    networks: !reset []
+    expose: !reset []
+    environment:
+      OPSBRAIN_NETWORK_MODE: host
+
+  nginx:
+    network_mode: host
+    networks: !reset []
+    ports: !reset []
+    volumes:
+      - type: bind
+        source: ./config/nginx-hostscan.conf
+        target: /etc/nginx/conf.d/opsbrain.conf
+        read_only: true

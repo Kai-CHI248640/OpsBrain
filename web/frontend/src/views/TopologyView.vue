@@ -32,6 +32,22 @@
         </el-col>
       </el-row>
 
+      <el-alert
+        v-if="selectedMethod === 'lan' && networkRuntime.warning"
+        class="runtime-alert"
+        type="warning"
+        show-icon
+        :closable="false"
+        :title="networkRuntime.warning"
+      >
+        <template #default>
+          <div class="runtime-detail">
+            当前可见网段：{{ networkRuntime.detected_subnets?.join(', ') || '未识别' }}。
+            要嗅探真实局域网，请使用 host network 部署采集器，或改用种子发现、Console Server、Excel 导入。
+          </div>
+        </template>
+      </el-alert>
+
       <!-- 串口服务器配置 -->
       <el-card v-if="selectedMethod === 'serial'" class="serial-config" shadow="never">
         <template #header>串口服务器配置</template>
@@ -334,6 +350,12 @@ const isLocalMode = computed(() => selectedMethod.value === 'local')
 const localSystem = ref(null)
 const discovering = ref(false)
 const collecting = ref(false)
+const networkRuntime = reactive({
+  warning: '',
+  detected_subnets: [],
+  mode: '',
+  can_sniff_lan: false,
+})
 
 // ── Discovery methods ──────────────────────────────────────────────
 const discoveryMethods = [
@@ -348,7 +370,7 @@ const discoveryMethods = [
   {
     id: 'lan',
     title: '局域网嗅探',
-    desc: '自动扫描本机所在网段的所有 IP，探测开放端口',
+    desc: '扫描后端可见网段的 IP 和开放端口；真实局域网建议 host network 部署',
     icon: Monitor,
     tag: '快速摸底',
     tagType: 'warning',
@@ -468,6 +490,8 @@ function startDiscovery() {
     }).then(res => {
       const data = res.data
       if (!data.ok) { ElMessage.error(data.error || '嗅探失败'); discovering.value = false; return }
+      if (data.runtime) Object.assign(networkRuntime, data.runtime)
+      if (data.runtime?.warning) ElMessage.warning(data.runtime.warning)
       devices.value = (data.devices || []).map(d => ({
         name: d.name, type: d.type || 'unknown', ip: d.ip || '',
         vendor: d.vendor === '?' ? 'other' : (d.vendor || 'other'),
@@ -845,6 +869,9 @@ import { onMounted } from 'vue'
 onMounted(() => {
   // Reset to step 0 on mount
   resetWizard()
+  api.get('/dashboard/network-runtime').then(res => {
+    Object.assign(networkRuntime, res.data)
+  }).catch(() => {})
 })
 </script>
 
@@ -855,6 +882,13 @@ onMounted(() => {
 .subtitle {
   color: #909399;
   margin: 0 0 8px;
+}
+.runtime-alert {
+  margin-top: 16px;
+}
+.runtime-detail {
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 /* ── 移动端步骤条 ── */
