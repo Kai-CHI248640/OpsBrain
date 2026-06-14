@@ -217,30 +217,38 @@ async def run_discovery(data: dict):
                 if len(hosts) >= 256:
                     break
 
-        # 并发 TCP 扫描（semaphore=20，timeout=1s）
-        sem = _aio.Semaphore(20)
+        # 并发 TCP 扫描（semaphore=50，timeout=1s）
+        sem = _aio.Semaphore(50)
 
         async def _probe(host: str) -> dict | None:
             async with sem:
-                is_ssh, is_telnet = False, False
-                for port, t in [(22, 1.0), (23, 1.0)]:
+                open_ports = {}
+                probe_ports = [(22, "ssh"), (23, "telnet"), (80, "http"),
+                               (443, "https"), (161, "snmp"), (8080, "http"), (8443, "https")]
+                for port, svc_name in probe_ports:
                     try:
-                        _, w = await _aio.wait_for(_aio.open_connection(host, port), timeout=t)
+                        _, w = await _aio.wait_for(_aio.open_connection(host, port), timeout=0.8)
                         w.close()
                         await w.wait_closed()
-                        if port == 22: is_ssh = True
-                        else: is_telnet = True
+                        open_ports[svc_name] = port
                     except Exception:
                         pass
-                login = "ssh" if is_ssh else ("telnet" if is_telnet else None)
-                if login is None:
+                if not open_ports:
                     return None
+                login = "ssh" if "ssh" in open_ports else ("telnet" if "telnet" in open_ports else None)
+                dev_type = "unknown"
+                if "snmp" in open_ports and ("http" in open_ports or "https" in open_ports):
+                    dev_type = "router"
+                elif "http" in open_ports and not login:
+                    dev_type = "router"
                 return {
                     "name": f"Device-{host}", "ip": host,
-                    "type": "unknown", "vendor": "unknown",
+                    "type": dev_type, "vendor": "unknown",
                     "loginMethod": login,
-                    "username": username, "password": password or "",
-                    "status": "online", "port": 22 if is_ssh else 23,
+                    "username": username if login else "", "password": password or "" if login else "",
+                    "status": "online",
+                    "port": open_ports.get(login, 0) if login else 0,
+                    "open_ports": open_ports,
                 }
 
         tasks = [_probe(h) for h in hosts]
