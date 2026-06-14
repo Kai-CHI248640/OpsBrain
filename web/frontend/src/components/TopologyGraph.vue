@@ -83,10 +83,21 @@ function getTheme() {
   }
 }
 
-const THEME = getTheme()
+// ── 设备图标 SVG ──────────────────────────────────────────
+function deviceIconSvg(type, color) {
+  const icons = {
+    router: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="${color}"/><text x="32" y="42" text-anchor="middle" font-size="28" fill="white">🌐</text></svg>`,
+    switch: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="${color}"/><text x="32" y="42" text-anchor="middle" font-size="28" fill="white">🔀</text></svg>`,
+    firewall: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="${color}"/><text x="32" y="42" text-anchor="middle" font-size="28" fill="white">🛡️</text></svg>`,
+    server: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="${color}"/><text x="32" y="42" text-anchor="middle" font-size="28" fill="white">🖥️</text></svg>`,
+    ap: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="${color}"/><text x="32" y="42" text-anchor="middle" font-size="28" fill="white">📶</text></svg>`,
+    unknown: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="${color}"/><text x="32" y="44" text-anchor="middle" font-size="32" font-weight="bold" fill="white">?</text></svg>`,
+  }
+  return icons[type] || icons.unknown
+}
 
 function deviceIcon(type) {
-  return { router: '🌐', switch: '🔀', firewall: '🛡️', server: '🖥️', ap: '📶', unknown: '📡' }[type] || '📡'
+  return { router: '🌐', switch: '🔀', firewall: '🛡️', server: '🖥️', ap: '📶', unknown: '❓' }[type] || '❓'
 }
 
 function typeLabel(type) {
@@ -97,42 +108,44 @@ function statusColor(status) {
   return { online: '#a6e3a1', offline: '#f38ba8', unknown: '#6c7086' }[status] || '#6c7086'
 }
 
+function makeIconImage(type, color) {
+  const svg = deviceIconSvg(type, color)
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`
+}
+
 // ── 初始化 vis-network ─────────────────────────────────────────────
 function initNetwork() {
   if (!containerRef.value) return
 
   const THEME = getTheme()
+  const nodeColors = THEME.nodeColors
 
-  const visNodes = props.nodes.map(n => ({
-    id: n.name || n.id,
-    label: n.name || '?',
-    title: `${n.name}\n${n.ip || ''}`,
-    shape: 'circularImage',
-    image: '', // will use custom HTML later
-    size: nodeSize(n),
-    color: {
-      background: nodeColor(n),
-      border: nodeColor(n),
-      highlight: { background: nodeColor(n), border: '#ffffff' },
-      hover: { background: lighten(nodeColor(n)), border: '#ffffff' },
-    },
-    font: {
-      color: THEME.fontColor,
-      size: 12,
-      face: 'sans-serif',
-      strokeWidth: 3,
-      strokeColor: THEME.bg,
-    },
-    borderWidth: 2,
-    borderWidthSelected: 3,
-    shapeProperties: { useBorderWithImage: true },
-    // Store extra data
-    deviceType: n.type || 'unknown',
-    deviceIp: n.ip || '',
-    deviceVendor: n.vendor || '',
-    deviceStatus: n.status || 'unknown',
-    connectionCount: 0,
-  }))
+  const visNodes = props.nodes.map(n => {
+    const type = n.type || 'unknown'
+    const color = nodeColors[type] || nodeColors.unknown
+    return {
+      id: n.name || n.id,
+      label: n.name || '?',
+      title: `${n.name}\n${n.ip || ''}`,
+      shape: 'image',
+      image: makeIconImage(type, color),
+      size: nodeSize(n),
+      font: {
+        color: THEME.fontColor,
+        size: 12,
+        face: 'sans-serif',
+        strokeWidth: 3,
+        strokeColor: THEME.bg,
+      },
+      borderWidth: 0,
+      borderWidthSelected: 0,
+      deviceType: type,
+      deviceIp: n.ip || '',
+      deviceVendor: n.vendor || '',
+      deviceStatus: n.status || 'unknown',
+      connectionCount: 0,
+    }
+  })
 
   const visEdges = props.links.map(l => ({
     from: l.source,
@@ -297,18 +310,9 @@ function initNetwork() {
   })
 }
 
-function nodeColor(n) {
-  return getTheme().nodeColors[n.type] || getTheme().nodeColors.unknown
-}
-
 function nodeSize(n) {
   const sizes = { router: 30, switch: 25, firewall: 28, server: 22, ap: 20, unknown: 18 }
   return sizes[n.type] || 18
-}
-
-function lighten(hex) {
-  // Simple lighten
-  return hex + '99'
 }
 
 function showNodePopup(nodeId, pos) {
@@ -392,13 +396,30 @@ watch(() => [props.nodes, props.links], () => {
   nextTick(() => initNetwork())
 }, { deep: true })
 
-// Watch for theme changes
+// Watch for theme changes — update colors without rebuilding
 const themeObserver = new MutationObserver(() => {
-  if (network) {
-    network.destroy()
-    network = null
-  }
-  nextTick(() => initNetwork())
+  if (!network || !nodesDataset || !edgesDataset) return
+  const THEME = getTheme()
+  // Update all node images with new theme colors
+  nodesDataset.forEach(node => {
+    const type = node.deviceType || 'unknown'
+    const color = THEME.nodeColors[type] || THEME.nodeColors.unknown
+    nodesDataset.update({
+      id: node.id,
+      image: makeIconImage(type, color),
+      font: { ...node.font, color: THEME.fontColor, strokeColor: THEME.bg },
+    })
+  })
+  // Update edges
+  edgesDataset.forEach(edge => {
+    edgesDataset.update({
+      id: edge.id,
+      color: { color: THEME.edgeColor, highlight: THEME.edgeHighlight, hover: THEME.edgeHighlight, opacity: 0.6 },
+      font: { ...edge.font, color: THEME.fontColor, strokeColor: THEME.bg },
+    })
+  })
+  // Update canvas background
+  network.setOptions({ background: { color: THEME.bg } })
 })
 
 onMounted(() => {

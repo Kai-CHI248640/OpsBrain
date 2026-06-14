@@ -261,6 +261,35 @@ async def run_discovery(data: dict):
         results = await _aio.gather(*tasks)
         devices = [d for d in results if d is not None]
 
+        # ── 生成拓扑连线（星形：所有设备连网关） ──
+        links = []
+        gw_ip = gw or ""
+        gw_dev = None
+        for d in devices:
+            if d["ip"] == gw_ip:
+                gw_dev = d
+                break
+        if gw_dev:
+            for d in devices:
+                if d["ip"] != gw_ip:
+                    links.append({
+                        "source": gw_dev["name"],
+                        "target": d["name"],
+                        "source_port": "LAN",
+                        "target_port": "",
+                        "confirmed": False,
+                    })
+        elif len(devices) >= 2:
+            hub = devices[0]
+            for d in devices[1:]:
+                links.append({
+                    "source": hub["name"],
+                    "target": d["name"],
+                    "source_port": "LAN",
+                    "target_port": "",
+                    "confirmed": False,
+                })
+
         # 深度嗅探：尝试 SSH 获取设备信息
         links, analysis = [], ""
         runtime = get_network_runtime_data()
