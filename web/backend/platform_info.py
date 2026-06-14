@@ -109,9 +109,8 @@ def get_local_ips() -> list[str]:
         try:
             for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
                 ip = info[4][0]
-                if ip.startswith("127.") or ip.startswith("198.18.") or ip.startswith("172.21."):
-                    continue
-                ips.append(ip)
+                if not ip.startswith("127."):
+                    ips.append(ip)
         except Exception:
             pass
     else:
@@ -165,9 +164,6 @@ def _subnets_windows() -> list[str]:
         for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
             ip = info[4][0]
             if ip.startswith("127."):
-                continue
-            # 过滤虚拟网卡网段
-            if ip.startswith("198.18.") or ip.startswith("172.21."):
                 continue
             try:
                 net = ipaddress.IPv4Network(f"{ip}/24", strict=False)
