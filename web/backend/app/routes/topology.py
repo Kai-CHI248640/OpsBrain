@@ -199,8 +199,11 @@ async def run_discovery(data: dict):
         for subnet_str in target_subnets[:3]:  # 最多3个子网
             try:
                 net = ipaddress.ip_network(subnet_str, strict=False)
-                hosts = [str(h) for h in list(net.hosts())[:15]]  # 每个子网最多15个
-                scanned_hosts.extend(hosts)
+                all_hosts = [str(h) for h in net.hosts()]
+                if len(all_hosts) > 256:
+                    scanned_hosts.extend(all_hosts[:256])
+                else:
+                    scanned_hosts.extend(all_hosts)
             except ValueError:
                 scanned_hosts.append(subnet_str)
 
@@ -211,7 +214,7 @@ async def run_discovery(data: dict):
             if h not in seen:
                 seen.add(h)
                 hosts.append(h)
-                if len(hosts) >= 50:
+                if len(hosts) >= 256:
                     break
 
         # 并发 TCP 扫描（semaphore=20，timeout=1s）
@@ -402,7 +405,7 @@ async def run_seed_discovery(data: dict):
 async def run_network_scan(data: dict):
     """主机网络嗅探：ARP + TCP 端口扫描（需要 host 网络模式）"""
     subnets = data.get("subnets", [])
-    max_hosts = data.get("max_hosts", 100)
+    max_hosts = data.get("max_hosts", 256)
     snmp_community = data.get("snmp_community", "public")
     
     try:

@@ -160,7 +160,7 @@ class NetworkScanner:
     """
     
     def __init__(self, subnets: list[str] | None = None,
-                 max_hosts: int = 100, snmp_community: str = "public",
+                 max_hosts: int = 256, snmp_community: str = "public",
                  probes: list[int] | None = None):
         self.subnets = subnets or get_local_subnets()
         self.max_hosts = max_hosts
@@ -176,7 +176,8 @@ class NetworkScanner:
         for sn in self.subnets:
             try:
                 net = ipaddress.ip_network(sn, strict=False)
-                for h in list(net.hosts())[:self.max_hosts // len(self.subnets)]:
+                per_subnet = self.max_hosts // max(len(self.subnets), 1)
+                for h in list(net.hosts())[:per_subnet]:
                     all_ips.add(str(h))
             except ValueError:
                 all_ips.add(sn)
