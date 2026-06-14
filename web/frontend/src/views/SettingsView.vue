@@ -96,7 +96,14 @@
                 >{{ PROVIDERS[row.provider]?.name || row.provider }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="model" label="模型" width="120" />
+            <el-table-column prop="model" label="模型" min-width="160">
+              <template #default="{ row }">
+                <span>{{ row.model || '—' }}</span>
+                <el-tag v-if="getModelContext(row.provider, row.model)" size="small" type="info" effect="plain" style="margin-left: 6px">
+                  {{ formatContext(getModelContext(row.provider, row.model)) }}
+                </el-tag>
+              </template>
+            </el-table-column>
             <el-table-column label="类型" width="80">
               <template #default="{ row }">
                 <el-tag v-if="row.api_type === 'llm'" size="small" type="primary" effect="plain">LLM</el-tag>
@@ -168,9 +175,19 @@
                   style="width: 100%"
                   placeholder="选择或输入模型名称"
                 >
-                  <el-option v-for="m in currentProvider.models" :key="m" :label="m" :value="m" />
+                  <el-option v-for="m in currentProvider.models" :key="m.id" :label="m.id" :value="m.id">
+                    <span>{{ m.id }}</span>
+                    <span style="color: #909399; font-size: 11px; margin-left: 8px">上下文 {{ formatContext(m.context) }} · 输出 {{ formatContext(m.output) }}</span>
+                  </el-option>
                 </el-select>
                 <el-input v-else v-model="apiForm.model" placeholder="输入模型名称" />
+              </el-form-item>
+              <el-form-item v-if="currentModelInfo" label="模型规格">
+                <el-descriptions :column="3" size="small" border style="width: 100%">
+                  <el-descriptions-item label="上下文窗口">{{ formatContext(currentModelInfo.context) }} tokens</el-descriptions-item>
+                  <el-descriptions-item label="最大输出">{{ formatContext(currentModelInfo.output) }} tokens</el-descriptions-item>
+                  <el-descriptions-item label="输入约">{{ Math.round(currentModelInfo.context * 0.75) }} 字</el-descriptions-item>
+                </el-descriptions>
               </el-form-item>
               <el-form-item label="设为默认">
                 <el-switch v-model="apiForm.is_default" />
@@ -650,42 +667,66 @@ const PROVIDERS = {
   openai: {
     name: 'OpenAI',
     api_base: 'https://api.openai.com/v1',
-    models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
+    models: [
+      { id: 'gpt-4o', context: 128000, output: 16384 },
+      { id: 'gpt-4o-mini', context: 128000, output: 16384 },
+      { id: 'gpt-4-turbo', context: 128000, output: 4096 },
+      { id: 'gpt-3.5-turbo', context: 16385, output: 4096 },
+    ],
     need_key: true,
     desc: 'OpenAI 官方 API',
   },
   deepseek: {
     name: 'DeepSeek',
     api_base: 'https://api.deepseek.com/v1',
-    models: ['deepseek-chat', 'deepseek-coder', 'deepseek-reasoner'],
+    models: [
+      { id: 'deepseek-chat', context: 65536, output: 8192 },
+      { id: 'deepseek-coder', context: 131072, output: 8192 },
+      { id: 'deepseek-reasoner', context: 65536, output: 8192 },
+    ],
     need_key: true,
     desc: 'DeepSeek 官方 API，国内访问快',
   },
   siliconflow: {
     name: 'SiliconFlow',
     api_base: 'https://api.siliconflow.cn/v1',
-    models: ['deepseek-ai/DeepSeek-V3', 'Qwen/Qwen2.5-72B-Instruct', 'meta-llama/Meta-Llama-3.1-70B-Instruct'],
+    models: [
+      { id: 'deepseek-ai/DeepSeek-V3', context: 65536, output: 8192 },
+      { id: 'Qwen/Qwen2.5-72B-Instruct', context: 131072, output: 8192 },
+      { id: 'meta-llama/Meta-Llama-3.1-70B-Instruct', context: 131072, output: 4096 },
+    ],
     need_key: true,
     desc: 'SiliconFlow 聚合平台，支持多种开源模型',
   },
   anthropic: {
     name: 'Anthropic',
     api_base: 'https://api.anthropic.com/v1',
-    models: ['claude-sonnet-4-20250514', 'claude-3-5-haiku-20241022'],
+    models: [
+      { id: 'claude-sonnet-4-20250514', context: 200000, output: 8192 },
+      { id: 'claude-3-5-haiku-20241022', context: 200000, output: 8192 },
+    ],
     need_key: true,
     desc: 'Anthropic Claude 系列模型',
   },
   mimo: {
     name: 'MiMo',
     api_base: 'https://token-plan-cn.xiaomimimo.com/v1',
-    models: ['mimo-v2.5-pro', 'mimo-v2.5'],
+    models: [
+      { id: 'mimo-v2.5-pro', context: 1048576, output: 131072 },
+      { id: 'mimo-v2.5', context: 1048576, output: 131072 },
+    ],
     need_key: true,
     desc: '小米 MiMo 大模型',
   },
   ollama: {
     name: 'Ollama（本地）',
     api_base: 'http://localhost:11434/v1',
-    models: ['llama3', 'qwen2.5', 'deepseek-r1', 'mistral'],
+    models: [
+      { id: 'llama3', context: 8192, output: 4096 },
+      { id: 'qwen2.5', context: 131072, output: 8192 },
+      { id: 'deepseek-r1', context: 65536, output: 8192 },
+      { id: 'mistral', context: 32768, output: 4096 },
+    ],
     need_key: false,
     desc: '本地 Ollama 服务，无需 API Key',
   },
@@ -707,12 +748,24 @@ const apiForm = reactive({
 })
 
 const currentProvider = computed(() => PROVIDERS[apiForm.provider] || PROVIDERS.custom)
+const currentModelInfo = computed(() => {
+  const p = currentProvider.value
+  if (!p || !p.models) return null
+  return p.models.find(m => m.id === apiForm.model) || null
+})
+
+function formatContext(n) {
+  if (!n) return ''
+  if (n >= 1000000) return `${(n / 1000000).toFixed(0)}M`
+  if (n >= 1000) return `${Math.round(n / 1000)}K`
+  return String(n)
+}
 
 function onProviderChange(provider) {
   const p = PROVIDERS[provider]
   if (!p) return
   apiForm.api_base = p.api_base
-  if (p.models.length > 0) apiForm.model = p.models[0]
+  if (p.models.length > 0) apiForm.model = p.models[0].id
   if (!p.need_key) apiForm.api_key = 'ollama-local'
   if (!apiForm.name) apiForm.name = p.name
 }
@@ -778,6 +831,14 @@ function maskKey(key) {
   if (!key) return ''
   if (key.length <= 12) return '****' + key.slice(-4)
   return key.slice(0, 8) + '****' + key.slice(-4)
+}
+
+function getModelContext(provider, modelId) {
+  if (!provider || !modelId) return 0
+  const p = PROVIDERS[provider]
+  if (!p || !p.models) return 0
+  const m = p.models.find(m => m.id === modelId)
+  return m?.context || 0
 }
 
 // ── 飞书集成 ───────────────────────────────────────────────────────────
