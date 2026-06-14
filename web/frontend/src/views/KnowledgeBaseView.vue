@@ -9,7 +9,10 @@
           <template #header>
             <div style="display:flex;align-items:center;justify-content:space-between">
               <span>📚 配置模板 ({{ configs.length }})</span>
-              <el-button type="primary" size="small" @click="showImport = true">📥 导入</el-button>
+              <div>
+                <el-button size="small" @click="downloadTemplate">📄 下载模板</el-button>
+                <el-button type="primary" size="small" @click="showImport = true">📥 导入</el-button>
+              </div>
             </div>
           </template>
           <el-table :data="configs" stripe size="small" max-height="500">
@@ -140,6 +143,30 @@ async function doSearch() {
 
 function onFileChange(file) {
   selectedFile.value = file.raw
+}
+
+function downloadTemplate() {
+  const header = 'vendor,task,commands,notes\n'
+  const rows = [
+    'cisco,查看接口状态,show ip interface brief,查看所有接口IP和状态',
+    'cisco,查看VLAN,show vlan brief,查看VLAN配置摘要',
+    'cisco,查看路由表,show ip route,查看路由表',
+    'huawei,查看接口状态,display ip interface brief,查看所有接口IP和状态',
+    'huawei,查看VLAN,display vlan,查看VLAN配置',
+    'h3c,查看接口状态,display ip interface brief,查看所有接口IP和状态',
+    'h3c,查看VLAN,display vlan,查看VLAN配置',
+    'juniper,查看接口状态,show interfaces terse,查看接口状态摘要',
+    'juniper,查看路由表,show route,查看路由表',
+  ]
+  const csv = header + rows.join('\n') + '\n'
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = '知识库导入模板.csv'
+  a.click()
+  URL.revokeObjectURL(url)
+  ElMessage.success('模板已下载')
 }
 
 async function doImport() {
