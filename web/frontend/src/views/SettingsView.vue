@@ -160,7 +160,7 @@
                   placeholder="sk-..."
                 />
               </el-form-item>
-              <el-form-item label="类型" required>
+              <el-form-item v-if="apiForm.provider === 'custom'" label="类型" required>
                 <el-select v-model="apiForm.api_type" style="width: 100%">
                   <el-option label="LLM 大模型" value="llm" />
                   <el-option label="向量/嵌入模型" value="embedding" />
@@ -189,8 +189,11 @@
                   <el-descriptions-item label="输入约">{{ Math.round(currentModelInfo.context * 0.75) }} 字</el-descriptions-item>
                 </el-descriptions>
               </el-form-item>
-              <el-form-item label="设为默认">
-                <el-switch v-model="apiForm.is_default" />
+              <el-form-item v-if="apiForm.provider === 'custom' && apiForm.api_type === 'llm'" label="上下文窗口">
+                <el-input-number v-model="apiForm.context" :min="1024" :max="10000000" :step="1024" style="width: 100%" />
+              </el-form-item>
+              <el-form-item v-if="apiForm.provider === 'custom' && apiForm.api_type === 'llm'" label="最大输出">
+                <el-input-number v-model="apiForm.max_output" :min="256" :max="1000000" :step="256" style="width: 100%" />
               </el-form-item>
             </el-form>
             <template #footer>
@@ -623,7 +626,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Sunny, Moon, Plus, Link, Connection, SuccessFilled, WarningFilled, Setting, Camera, Edit, Delete } from '@element-plus/icons-vue'
 import { api } from '@/stores/auth'
@@ -680,9 +683,9 @@ const PROVIDERS = {
     name: 'DeepSeek',
     api_base: 'https://api.deepseek.com/v1',
     models: [
-      { id: 'deepseek-chat', context: 65536, output: 8192 },
-      { id: 'deepseek-coder', context: 131072, output: 8192 },
-      { id: 'deepseek-reasoner', context: 65536, output: 8192 },
+      { id: 'deepseek-chat', context: 131072, output: 16384 },
+      { id: 'deepseek-reasoner', context: 131072, output: 16384 },
+      { id: 'deepseek-coder', context: 131072, output: 16384 },
     ],
     need_key: true,
     desc: 'DeepSeek 官方 API，国内访问快',
@@ -745,6 +748,7 @@ const savingApi = ref(false)
 const apiForm = reactive({
   name: '', provider: 'deepseek', api_base: '',
   api_key: '', api_type: 'llm', model: '', is_default: false,
+  context: 128000, max_output: 8192,
 })
 
 const currentProvider = computed(() => PROVIDERS[apiForm.provider] || PROVIDERS.custom)
@@ -765,10 +769,26 @@ function onProviderChange(provider) {
   const p = PROVIDERS[provider]
   if (!p) return
   apiForm.api_base = p.api_base
-  if (p.models.length > 0) apiForm.model = p.models[0].id
+  if (p.models.length > 0) {
+    apiForm.model = p.models[0].id
+    apiForm.context = p.models[0].context
+    apiForm.max_output = p.models[0].output
+  }
   if (!p.need_key) apiForm.api_key = 'ollama-local'
   if (!apiForm.name) apiForm.name = p.name
+  if (provider !== 'custom') apiForm.api_type = 'llm'
 }
+
+// 模型切换时更新上下文
+watch(() => apiForm.model, (modelId) => {
+  const p = currentProvider.value
+  if (!p || !p.models) return
+  const m = p.models.find(m => m.id === modelId)
+  if (m) {
+    apiForm.context = m.context
+    apiForm.max_output = m.output
+  }
+})
 
 async function loadApis() {
   try {
@@ -785,7 +805,7 @@ async function saveApi() {
     await api.post('/apis/', { ...apiForm })
     ElMessage.success('API Key 已添加')
     showAddApi.value = false
-    Object.assign(apiForm, { name: '', provider: 'deepseek', api_base: 'https://api.deepseek.com/v1', api_key: '', api_type: 'llm', model: 'deepseek-chat', is_default: false })
+    Object.assign(apiForm, { name: '', provider: 'deepseek', api_base: 'https://api.deepseek.com/v1', api_key: '', api_type: 'llm', model: 'deepseek-chat', is_default: false, context: 131072, max_output: 16384 })
     await loadApis()
   } catch (e) {
     ElMessage.error(e.response?.data?.detail || '保存失败')
