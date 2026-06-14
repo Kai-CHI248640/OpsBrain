@@ -48,3 +48,21 @@ upload_*.py
 full_test.py
 backup*.py
 *_check.py
+
+# Deployment scripts with credentials
+deploy.py
+deploy2.py
+build_final.py
+build_remote.py
+build_web.py
+build_nginx.py
+check.py
+scripts/
+
+# Logs
+npm-dev.log
+*.log
+
+# Data directories (created at runtime)
+data/
+.opsbrain/

@@ -18,7 +18,8 @@ from logging_setup import get_logger
 log = get_logger(__name__)
 
 # ── Database path ──────────────────────────────────────────────────────────
-DB_DIR = Path(os.environ.get("OPSBRAIN_HOME", "/var/lib/opsbrain"))
+_DEFAULT_DB_DIR = Path.home() / ".opsbrain" if os.name == "nt" else Path("/var/lib/opsbrain")
+DB_DIR = Path(os.environ.get("OPSBRAIN_HOME", str(_DEFAULT_DB_DIR)))
 DB_PATH = DB_DIR / "opsbrain.db"
 DB_URL = f"sqlite+aiosqlite:///{DB_PATH}"
 

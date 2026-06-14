@@ -15,8 +15,19 @@ import json
 import os
 import sqlite3
 import re
+from pathlib import Path
 
-KNOWLEDGE_DIR = os.environ.get("OPSBRAIN_HOME", "/var/lib/opsbrain") + "/knowledge"
+
+def _get_knowledge_dir() -> str:
+    env = os.environ.get("OPSBRAIN_HOME")
+    if env:
+        return os.path.join(env, "knowledge")
+    if os.name == "nt":
+        return str(Path.home() / ".opsbrain" / "knowledge")
+    return "/var/lib/opsbrain/knowledge"
+
+
+KNOWLEDGE_DIR = _get_knowledge_dir()
 _DB_PATH = None
 _conn: sqlite3.Connection | None = None
 

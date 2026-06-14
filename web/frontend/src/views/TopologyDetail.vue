@@ -2,19 +2,11 @@
   <div class="topo-detail">
     <div class="detail-header">
       <div class="detail-header-left">
-        <el-button text icon="ArrowLeft" @click="$router.push('/topology')">返回</el-button>
-        <el-input
-          v-if="editingName"
-          v-model="editNameValue"
-          size="small"
-          style="width:160px"
-          @keyup.enter="saveName"
-          @blur="saveName"
-          ref="nameInput"
-        />
-        <h2 v-else style="display:inline;cursor:pointer;margin:0" @click="startEditName">{{ topology.name }}</h2>
-        <el-button v-if="!editingName" text size="small" icon="Edit" @click="startEditName" />
-        <span class="meta">{{ nodeList.length }}设备 · {{ linkList.length }}链路</span>
+        <el-button text icon="ArrowLeft" @click="$router.push('/topology')" class="back-btn">返回</el-button>
+        <el-input v-if="editingName" v-model="editNameValue" size="small" style="width:180px" @keyup.enter="saveName" @blur="saveName" ref="nameInput" />
+        <h2 v-else class="topo-title" @click="startEditName">{{ topology.name }}</h2>
+        <el-button v-if="!editingName" text size="small" icon="Edit" @click="startEditName" class="edit-btn" />
+        <span class="topo-meta">{{ nodeList.length }} 设备 · {{ linkList.length }} 链路</span>
       </div>
       <div class="detail-header-right">
         <el-button size="small" @click="$refs.topoGraph?.fitView()">适配</el-button>
@@ -23,26 +15,12 @@
     </div>
 
     <!-- Stats -->
-    <el-row :gutter="[6, 6]" style="margin-bottom:12px">
-      <el-col :xs="8" :sm="4" v-for="stat in stats" :key="stat.label">
-        <el-card shadow="hover" :body-style="{ padding:'8px 12px' }">
-          <div style="text-align:center">
-            <div style="font-size:22px;font-weight:700;color:var(--primary-color)">{{ stat.value }}</div>
-            <div style="font-size:11px;color:#909399">{{ stat.label }}</div>
-          </div>
-        </el-card>
-      </el-col>
-      <el-col :xs="8" :sm="4">
-        <el-card shadow="hover" :body-style="{ padding:'8px 12px' }">
-          <div style="text-align:center">
-            <div style="font-size:18px;font-weight:700;color:#909399">
-              {{ nodeList.filter(n => n.dragging).length ? '拖拽中...' : '就绪' }}
-            </div>
-            <div style="font-size:10px;color:#909399">画布状态</div>
-          </div>
-        </el-card>
-      </el-col>
-    </el-row>
+    <div class="stats-row">
+      <div v-for="stat in stats" :key="stat.label" class="mini-stat">
+        <div class="mini-stat-value">{{ stat.value }}</div>
+        <div class="mini-stat-label">{{ stat.label }}</div>
+      </div>
+    </div>
 
     <!-- Obsidian 风格拓扑图 -->
     <TopologyGraph
@@ -204,30 +182,34 @@ function onDeviceClick(device) {
 
 <style scoped>
 .topo-detail { max-width: 1300px; }
-.detail-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px }
-.detail-header-left { display:flex; align-items:center; gap:6px; flex-wrap:wrap; min-width:0; }
-.detail-header-right { display:flex; gap:6px; flex-shrink:0; }
-.detail-header-left h2 { font-size: clamp(14px, 3vw, 22px); max-width: 200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.meta { color: #909399; font-size: 12px; white-space:nowrap; }
+
+.detail-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; }
+.detail-header-left { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.detail-header-right { display: flex; gap: 8px; flex-shrink: 0; }
+.back-btn { color: var(--text-secondary); }
+.topo-title { font-size: 20px; font-weight: 800; color: var(--text-color); cursor: pointer; margin: 0; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.edit-btn { color: var(--text-muted); }
+.topo-meta { color: var(--text-secondary); font-size: 13px; white-space: nowrap; }
+
+/* ── Stats Row ── */
+.stats-row { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.mini-stat {
+  background: var(--card-bg); border: 1px solid var(--border-color); border-radius: var(--radius-sm);
+  padding: 10px 16px; text-align: center; min-width: 80px;
+}
+.mini-stat-value { font-size: 20px; font-weight: 800; color: var(--primary-color); }
+.mini-stat-label { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
 
 /* ── Device table ── */
 .topo-detail .el-table__body-wrapper { overflow-x: auto; }
 
 /* ── 移动端 ── */
 @media (max-width: 768px) {
-  .detail-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 6px;
-  }
-  .detail-header-right {
-    width: 100%;
-    justify-content: flex-start;
-    gap: 4px;
-  }
-  .detail-header-right .el-button {
-    padding: 4px 8px;
-    font-size: 12px;
-  }
+  .detail-header { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .detail-header-right { width: 100%; justify-content: flex-start; gap: 4px; }
+  .detail-header-right .el-button { padding: 4px 8px; font-size: 12px; }
+  .stats-row { gap: 8px; }
+  .mini-stat { padding: 8px 12px; min-width: 60px; }
+  .mini-stat-value { font-size: 16px; }
 }
 </style>

@@ -2,150 +2,125 @@
 
 面向中小企业的开源网络运维 Agent 框架，自动发现网络拓扑、智能分析故障、主动备份配置。
 
-[![Python](https://img.shields.io/badge/Python-3.12+-brightgreen?logo=python)](https://python.org)
-[![Vue 3](https://img.shields.io/badge/Vue-3.x-brightgreen?logo=vue.js)](https://vuejs.org)
-[![Docker](https://img.shields.io/badge/Docker-Compose-blue?logo=docker)](https://docs.docker.com/compose/)
-[![License](https://img.shields.io/badge/License-BSL_1.1-blue)](LICENSE)
+## 快速开始
 
----
+### 环境要求
 
-## 核心能力
+- Node.js >= 18
+- Python >= 3.11
+- Git
 
-- 🔍 **4 种网络发现模式** — 种子设备（LLDP/CDP）、主机嗅探（ARP/SNMP）、串口服务器（Console）、Excel 表格导入
-- 🗺️ **交互式拓扑图** — Vue 3 + Canvas 实现，拖拽缩放，点击查看设备详情
-- 🤖 **AI Agent 运维助手** — LLM 驱动的自然语言交互，支持设备 SSH 操作、配置备份、故障分析
-- 🚀 **Docker Compose 一键部署** — Web 前端 + FastAPI 后端 + Nginx，开箱即用
-- 📱 **飞书 Bot 集成** — 移动端查看拓扑、接收告警
+### Windows 部署（推荐开发）
 
----
+```powershell
+# 1. 克隆仓库
+git clone https://github.com/Kai-CHI248640/OpsBrain.git
+cd OpsBrain
 
-## 架构总览
+# 2. 创建 Python 虚拟环境
+python -m venv venv
+.\venv\Scripts\activate
 
-```
-┌──────────────────────────────────────────┐
-│               浏览器 (Vue 3 SPA)           │
-│     控制台 / 拓扑图 / 知识库 / Agent 对话  │
-└────────────────┬─────────────────────────┘
-                 │ HTTP (nginx)
-┌────────────────▼─────────────────────────┐
-│              FastAPI 后端                  │
-│  设备管理 | 拓扑引擎 | 配置中心 | AI Agent │
-└────────────────┬─────────────────────────┘
-                 │
-     ┌───────────┼───────────┬─────────────┐
-     ▼           ▼           ▼             ▼
- ┌───────┐  ┌───────┐  ┌────────┐  ┌──────────┐
- │种子发现│  │主机嗅探│  │Console │  │Excel导入  │
- │LLDP/CDP│  │ARP/SNMP│  │Server │  │台账导入   │
- └───────┘  └───────┘  └────────┘  └──────────┘
+# 3. 安装所有依赖（Node + Python）
+npm run setup
+
+# 4. 启动开发环境（前端 + 后端）
+npm run dev
+
+# 5. 访问
+# 前端: http://localhost:3000
+# API:  http://localhost:8000/docs
 ```
 
----
+### Linux/Mac 部署
+
+```bash
+# 1. 克隆仓库
+git clone https://github.com/Kai-CHI248640/OpsBrain.git
+cd OpsBrain
+
+# 2. 创建 Python 虚拟环境
+python3 -m venv venv
+source venv/bin/activate
+
+# 3. 安装依赖
+npm run setup
+
+# 4. 启动
+npm run dev
+```
+
+### Docker 部署（生产环境）
+
+```bash
+cd oobm-topology
+docker compose up -d
+
+# 访问
+# 前端: http://localhost
+# API:  http://localhost/opsbrain/api/v1/auth/setup-required
+```
 
 ## 项目结构
 
 ```
 opsbrain/
-├── web/                     # Web 前后端
-│   ├── frontend/            # Vue 3 + Vite
+├── package.json              # 根 package.json（npm 部署入口）
+├── web/
+│   ├── frontend/             # Vue 3 + Vite + Element Plus
 │   │   ├── src/
-│   │   │   ├── views/       # Dashboard / 拓扑 / 知识库 / Agent / 设置
-│   │   │   ├── components/  # TopologyGraph / AgentPanel / AppLayout
-│   │   │   └── stores/      # Pinia 状态管理
-│   │   └── index.html
-│   ├── backend/             # FastAPI
+│   │   │   ├── views/        # 控制台 / 拓扑 / 知识库 / 设置
+│   │   │   ├── components/   # AppLayout / AgentPanel / TopologyGraph
+│   │   │   ├── stores/       # Pinia 状态管理
+│   │   │   └── assets/       # 样式 / 图标
+│   │   └── package.json
+│   ├── backend/              # FastAPI 后端
 │   │   ├── app/
-│   │   │   ├── routes/      # auth / dashboard / topology / agents / settings
-│   │   │   ├── discovery/   # 种子发现 / 串口采集
-│   │   │   ├── scanner/     # 主机扫描 / Console 采集器
-│   │   │   └── models/      # Pydantic + SQLAlchemy
-│   │   └── Dockerfile
-│   └── nginx/               # Nginx 反向代理
-│       └── opsbrain.conf
-├── oobm-topology/           # OOBM 拓扑采集 Python 包
-│   ├── src/opsbrain_oobm/
-│   │   ├── collector/       # SSH 采集引擎
-│   │   ├── parser/          # CLI 输出解析 (TextFSM)
-│   │   ├── topology/        # 拓扑构建 + 双向端口确认
-│   │   └── orchestrator/    # 流程编排 Pipeline
-│   └── docker-compose.yml
-├── agent/                   # AI Agent 定义
-│   └── oobm-topology-skill.md
-├── docs/                    # 设计文档
-│   └── opsbrain-v2-design.md
-└── README.md
+│   │   │   ├── routes/       # API 路由
+│   │   │   ├── discovery/    # 种子发现
+│   │   │   ├── scanner/      # 主机扫描
+│   │   │   └── models.py     # 数据模型
+│   │   ├── platform_info.py  # 跨平台系统信息工具
+│   │   └── requirements.txt
+│   └── nginx/                # Nginx 反向代理
+├── oobm-topology/            # OOBM 拓扑采集引擎
+└── docs/                     # 设计文档
 ```
 
-## 四种网络发现模式
+## 核心功能
 
-| 模式 | 原理 | 适用场景 |
-|------|------|---------|
-| 🌱 **种子发现** | SSH 登录核心设备，LLDP/CDP 递归发现全网 | 有设备密码，要准确拓扑 |
-| 🔭 **主机嗅探** | ARP + TCP + SNMP 扫描本地子网 | 无凭证，想知道网上有什么 |
-| 🔌 **Console Server** | 通过串口服务器 Console 口访问设备 | 带外管理，网络故障时也能用 |
-| 📋 **Excel 导入** | 上传设备台账，自动验证可达性 | 已有台账，直接导入 |
-
-四种模式可**任意组合**——先导入 Excel 台账，再用种子发现补全 LLDP 链路。
-
-### Docker 下的真实网络嗅探
-
-如果 OpsBrain 运行在默认 Docker bridge 网络里，后端看到的通常是容器网段（例如 `172.17.0.0/16`），而不是宿主机所在的真实办公网。因此：
-
-- `种子发现`、`Console Server`、`Excel 导入` 不依赖二层广播，适合普通 Docker 部署。
-- `局域网嗅探` 可以扫描显式填写且可路由的网段，但自动网段识别、ARP 类发现需要后端直接看到宿主机网卡。
-- 要在 Linux 主机上嗅探真实局域网，使用 host network 覆盖配置：
-
-```bash
-cd oobm-topology
-docker compose -f docker-compose.yml -f docker-compose.hostscan.yml up -d nginx web
-```
-
-Host network 会让后端直接访问宿主机网络栈，请只在可信的管理主机或管理 VLAN 中使用。
-
-## 支持的厂商
-
-| 厂商 | LLDP | CDP | ARP | MAC | 路由 | 接口 |
-|------|------|-----|-----|-----|------|------|
-| Cisco IOS/NX-OS | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 华为 VRP | ✅ | — | ✅ | ✅ | ✅ | ✅ |
-| H3C Comware | ✅ | — | ✅ | ✅ | ✅ | ✅ |
-| Juniper JunOS | ✅ | — | ✅ | ✅ | ✅ | ✅ |
-| FortiGate | ✅ | — | ✅ | — | ✅ | ✅ |
-| 锐捷 | ✅ | — | ✅ | ✅ | ✅ | ✅ |
-
-## 快速开始
-
-```bash
-# 1. 克隆
-git clone https://github.com/Kai-CHI248640/OpsBrain.git
-cd opsbrain
-
-# 2. 启动 Web 平台
-cd web
-docker compose up -d
-
-# 3. 访问
-# 前端: http://localhost:3000
-# API:  http://localhost:8000/docs
-
-# 4. (可选) 运行 OOBM 拓扑采集
-cd oobm-topology
-make init && make run
-```
+- **4 种网络发现模式** — 种子设备（LLDP/CDP）、主机嗅探（ARP/SNMP）、串口服务器（Console）、Excel 导入
+- **交互式拓扑图** — Vue 3 + vis-network，拖拽缩放，点击查看设备详情
+- **AI Agent 运维助手** — LLM 驱动的自然语言交互，支持设备 SSH 操作、配置备份、故障分析
+- **知识库管理** — 配置模板存储，支持 CSV/XLSX 导入
+- **飞书集成** — 群聊消息自动路由到 Agent 处理
 
 ## 技术栈
 
 | 层 | 技术 | 说明 |
 |---|------|------|
-| 前端 | Vue 3 + Vite + Pinia | SPA 单页应用 |
-| 拓扑图 | Canvas 自研渲染 | 拖拽缩放，交互式 |
-| 后端 | FastAPI + SQLAlchemy | 异步 API，Swagger 文档 |
+| 前端 | Vue 3 + Vite + Element Plus | SPA 单页应用 |
+| 拓扑图 | vis-network | 交互式拓扑渲染 |
+| 后端 | FastAPI + SQLAlchemy | 异步 API |
 | 数据库 | SQLite | 轻量，零运维 |
-| AI Agent | LLM + Tool Calling | 自然语言运维 |
-| 部署 | Docker Compose | 单机一键部署 |
+| AI Agent | LLM + Function Calling | 自然语言运维 |
 | SSH | paramiko | 设备命令行采集 |
 
----
+## 环境变量
+
+| 变量 | Windows 默认值 | Linux 默认值 | 说明 |
+|------|---------------|-------------|------|
+| `OPSBRAIN_JWT_SECRET` | change-me-in-production | 同左 | JWT 密钥 |
+| `OPSBRAIN_HOME` | ~/.opsbrain | /var/lib/opsbrain | 数据目录 |
+| `OPSBRAIN_LOG_FORMAT` | json | 同左 | 日志格式 |
+
+## 平台支持
+
+| 平台 | 状态 |
+|------|------|
+| Windows | ✅ 支持 |
+| Linux | 🔄 计划中 |
+| macOS | 🔄 计划中 |
 
 ## License
 

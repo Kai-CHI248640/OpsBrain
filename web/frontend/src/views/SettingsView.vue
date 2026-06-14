@@ -46,28 +46,22 @@
           <div class="tab-header">
             <div>
               <h3>项目文件管理</h3>
-              <p class="tab-desc">配置拉取的项目、镜像、数据等文件的存放路径</p>
+              <p class="tab-desc">配置项目、数据、日志等文件的存放路径</p>
             </div>
           </div>
 
           <el-form :model="projectForm" label-width="140px" size="default">
             <el-form-item label="项目存储路径">
-              <el-input v-model="projectForm.projects_path" placeholder="/var/lib/opsbrain/projects" />
-            </el-form-item>
-            <el-form-item label="镜像存储路径">
-              <el-input v-model="projectForm.images_path" placeholder="/var/lib/opsbrain/images" />
+              <el-input v-model="projectForm.projects_path" placeholder="默认路径" />
             </el-form-item>
             <el-form-item label="数据存储路径">
-              <el-input v-model="projectForm.data_path" placeholder="/var/lib/opsbrain/data" />
+              <el-input v-model="projectForm.data_path" placeholder="默认路径" />
             </el-form-item>
             <el-form-item label="日志存储路径">
-              <el-input v-model="projectForm.logs_path" placeholder="/var/lib/opsbrain/logs" />
+              <el-input v-model="projectForm.logs_path" placeholder="默认路径" />
             </el-form-item>
             <el-form-item label="备份存储路径">
-              <el-input v-model="projectForm.backup_path" placeholder="/var/lib/opsbrain/backups" />
-            </el-form-item>
-            <el-form-item label="Docker Registry">
-              <el-input v-model="projectForm.docker_registry" placeholder="私有镜像仓库地址（可选）" />
+              <el-input v-model="projectForm.backup_path" placeholder="默认路径" />
             </el-form-item>
             <el-form-item>
               <el-button type="primary" @click="saveProjectConfig">保存配置</el-button>
@@ -190,7 +184,7 @@
           <div class="tab-header">
             <div>
               <h3>飞书机器人</h3>
-              <p class="tab-desc">将总控 Commander Agent 接入飞书/Lark，群聊消息自动路由到 Agent 处理</p>
+              <p class="tab-desc">将 AI 运维助手接入飞书/Lark，群聊消息自动路由到 Agent 处理</p>
             </div>
             <div>
               <template v-if="feishuConfigured">
@@ -287,10 +281,10 @@
             </div>
             <h3 style="margin:16px 0 8px">飞书机器人集成</h3>
             <p style="color:#909399;font-size:13px;max-width:480px;margin:0 auto 20px;line-height:1.7">
-              将总控 Commander Agent 接入飞书/Lark，团队成员可以在飞书群聊中直接与 Agent 对话，
+              将 AI 运维助手接入飞书/Lark，团队成员可以在飞书群聊中直接与 Agent 对话，
               查询网络拓扑、设备状态、执行运维任务。
               <br/><br/>
-              <strong>只绑定总控 Agent</strong>：飞书消息路由到 Commander Agent，由它调度 Subagent 执行具体任务。
+              <strong>统一 Agent</strong>：飞书消息直接路由到 AI 运维助手，由它调用工具执行具体任务。
             </p>
             <el-button type="primary" size="large" :icon="Plus" @click="openWizard">开始配置</el-button>
 
@@ -593,7 +587,7 @@
               <el-descriptions-item label="前端">Vue 3 + Element Plus + Vite</el-descriptions-item>
               <el-descriptions-item label="引擎">Python 3.12 / Paramiko / TextFSM</el-descriptions-item>
               <el-descriptions-item label="部署">Docker Compose</el-descriptions-item>
-              <el-descriptions-item label="数据目录">/var/lib/opsbrain</el-descriptions-item>
+              <el-descriptions-item label="数据目录">~/.opsbrain</el-descriptions-item>
               <el-descriptions-item label="作者">OpsBrain Team</el-descriptions-item>
             </el-descriptions>
           </div>
@@ -623,13 +617,10 @@ function changeTheme(val) {
 
 // ── 项目文件 ──────────────────────────────────────────────────────────
 const projectForm = reactive({
-  projects_path: '/var/lib/opsbrain/projects',
-  images_path: '/var/lib/opsbrain/images',
-  data_path: '/var/lib/opsbrain/data',
-  logs_path: '/var/lib/opsbrain/logs',
-  backup_path: '/var/lib/opsbrain/backups',
-  docker_registry: '',
-  image_cache_path: '/var/lib/opsbrain/images/cache',
+  projects_path: '',
+  data_path: '',
+  logs_path: '',
+  backup_path: '',
 })
 
 function saveProjectConfig() {
@@ -638,13 +629,10 @@ function saveProjectConfig() {
 
 function resetProjectConfig() {
   Object.assign(projectForm, {
-    projects_path: '/var/lib/opsbrain/projects',
-    images_path: '/var/lib/opsbrain/images',
-    data_path: '/var/lib/opsbrain/data',
-    logs_path: '/var/lib/opsbrain/logs',
-    backup_path: '/var/lib/opsbrain/backups',
-    docker_registry: '',
-    image_cache_path: '/var/lib/opsbrain/images/cache',
+    projects_path: '',
+    data_path: '',
+    logs_path: '',
+    backup_path: '',
   })
   ElMessage.success('已恢复默认值')
 }

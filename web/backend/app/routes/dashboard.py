@@ -15,6 +15,7 @@ from __future__ import annotations
 import json as _json
 import httpx
 import asyncio
+import socket
 
 from fastapi import APIRouter, Depends, HTTPException, File, UploadFile
 from sqlalchemy import select
@@ -63,9 +64,12 @@ async def get_stats_data() -> dict:
         working_subagents = sum(1 for s in subagents if s.status == "working")
         total_subagents = len(subagents)
 
+    total_devices = sum(t.device_count for t in topologies)
+
     return {
         "topology_count": topology_count,
         "faulty_devices": faulty_devices,
+        "total_devices": total_devices,
         "api_status": {
             "total": total_apis,
             "healthy": None,
@@ -131,82 +135,33 @@ async def check_api_health(user: User = Depends(get_current_user)):
 
 async def get_local_info() -> dict:
     """获取 OpsBrain 部署主机的系统信息"""
-    import platform, socket, os
+    import platform
+    from platform_info import get_cpu_info, get_memory_info, get_disk_info, get_local_ips
 
-    # CPU
-    cpu_model = "Unknown"
-    cpu_cores = 0
-    try:
-        with open("/proc/cpuinfo") as f:
-            for line in f:
-                if "model name" in line:
-                    cpu_model = line.split(":", 1)[1].strip()
-                if "processor" in line:
-                    cpu_cores += 1
-    except:
-        cpu_cores = os.cpu_count() or 0
-
-    # Memory
-    mem_total = mem_used = mem_free = 0
-    try:
-        with open("/proc/meminfo") as f:
-            for line in f:
-                if "MemTotal" in line:
-                    mem_total = int(line.split()[1]) // 1024
-                elif "MemAvailable" in line:
-                    mem_free = int(line.split()[1]) // 1024
-                elif "MemFree" in line and not mem_free:
-                    mem_free = int(line.split()[1]) // 1024
-        mem_used = mem_total - mem_free
-    except:
-        pass
-
-    # Disk
-    try:
-        stat = os.statvfs("/var/lib/opsbrain" if os.path.exists("/var/lib/opsbrain") else "/")
-        disk_total = (stat.f_frsize * stat.f_blocks) // (1024**3)
-        disk_free = (stat.f_frsize * stat.f_bavail) // (1024**3)
-    except:
-        disk_total = disk_free = 0
-
-    # Network
     hostname = socket.gethostname()
-    ips = []
-    try:
-        import subprocess
-        result = subprocess.run(["hostname", "-I"], capture_output=True, text=True, timeout=3)
-        ips = [ip.strip() for ip in result.stdout.split() if ip.strip()]
-    except:
-        pass
-    if not ips:
-        try:
-            ips = [socket.gethostbyname(hostname)]
-        except:
-            ips = ["unknown"]
+    cpu = get_cpu_info()
+    mem = get_memory_info()
+    disk = get_disk_info()
+    ips = get_local_ips()
 
     return {
         "hostname": hostname,
         "os": platform.platform()[:80],
-        "cpu": {"model": cpu_model, "cores": cpu_cores},
-        "memory": {"total_mb": mem_total, "used_mb": mem_used, "free_mb": mem_free,
-                    "pct": round(mem_used/mem_total*100, 1) if mem_total else 0},
-        "disk": {"total_gb": disk_total, "free_gb": disk_free},
+        "cpu": cpu,
+        "memory": mem,
+        "disk": disk,
         "network": {"hostname": hostname, "ips": ips},
         "is_local": True,
     }
 
 
 def get_network_runtime_data() -> dict:
-    """Describe whether the backend can see the host network.
-
-    Docker bridge mode usually exposes only container/private bridge subnets
-    such as 172.17.0.0/16. ARP/LLDP/CDP-style discovery needs host networking
-    or a collector installed directly on a machine inside the target LAN.
-    """
+    """Describe whether the backend can see the host network."""
     import os
     import ipaddress
+    from platform_info import detect_local_subnets, detect_container
 
-    subnets = _detect_visible_subnets()
+    subnets = detect_local_subnets()
     private_bridge_prefixes = ("172.17.", "172.18.", "172.19.")
     bridge_like = False
     host_like = False
@@ -221,19 +176,7 @@ def get_network_runtime_data() -> dict:
         elif net.is_private and not str(net.network_address).startswith("127."):
             host_like = True
 
-    cgroup_text = ""
-    try:
-        with open("/proc/1/cgroup", "r", encoding="utf-8", errors="ignore") as fh:
-            cgroup_text = fh.read()
-    except Exception:
-        pass
-
-    in_container = (
-        os.path.exists("/.dockerenv")
-        or "docker" in cgroup_text
-        or "kubepods" in cgroup_text
-        or "containerd" in cgroup_text
-    )
+    in_container = detect_container()
     mode = "host" if in_container and host_like and not bridge_like else "bridge" if in_container else "bare-metal"
     can_sniff_lan = mode in ("host", "bare-metal")
 
@@ -250,30 +193,9 @@ def get_network_runtime_data() -> dict:
 
 
 def _detect_visible_subnets() -> list[str]:
-    """Read Linux routing table and return subnets visible to this process."""
-    import ipaddress
-    import socket
-    import struct
-
-    subnets: list[str] = []
-    try:
-        with open("/proc/net/route", "r", encoding="utf-8", errors="ignore") as fh:
-            next(fh, None)
-            for line in fh:
-                parts = line.split()
-                if len(parts) < 8:
-                    continue
-                dest_hex, mask_hex = parts[1], parts[7]
-                if dest_hex == "00000000" or mask_hex == "00000000":
-                    continue
-                dest = socket.inet_ntoa(struct.pack("<L", int(dest_hex, 16)))
-                mask = socket.inet_ntoa(struct.pack("<L", int(mask_hex, 16)))
-                net = ipaddress.IPv4Network(f"{dest}/{mask}", strict=False)
-                if not str(net.network_address).startswith("127."):
-                    subnets.append(str(net))
-    except Exception:
-        pass
-    return list(dict.fromkeys(subnets))
+    """Read routing table and return subnets visible to this process."""
+    from platform_info import detect_local_subnets
+    return detect_local_subnets()
 
 
 @dashboard_router.get("/local-info")

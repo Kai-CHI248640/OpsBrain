@@ -12,6 +12,7 @@ Docker 风格 CLI: 单个二进制入口，subcommand 驱动
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -24,6 +25,24 @@ from .logging_setup import setup_logging, get_logger
 log = get_logger(__name__)
 
 
+def _data_dir() -> str:
+    env = os.environ.get("OPSBRAIN_HOME")
+    if env:
+        return env
+    if os.name == "nt":
+        return str(Path.home() / ".opsbrain")
+    return "/var/lib/opsbrain"
+
+
+def _config_dir() -> str:
+    env = os.environ.get("OPSBRAIN_CONFIG_DIR")
+    if env:
+        return env
+    if os.name == "nt":
+        return str(Path.home() / ".opsbrain" / "config")
+    return "/etc/opsbrain"
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # 通用选项
 # ═══════════════════════════════════════════════════════════════════════════
@@ -33,7 +52,7 @@ _common_opts = [
         "--config",
         "-c",
         envvar="OPSBRAIN_CONFIG_DIR",
-        default="/etc/opsbrain",
+        default=_config_dir(),
         show_envvar=True,
         help="配置目录路径",
         type=click.Path(exists=True, file_okay=False, dir_okay=True),
@@ -88,7 +107,7 @@ def inventory():
 @click.option(
     "--file", "-f",
     envvar="OPSBRAIN_INVENTORY_FILE",
-    default="/etc/opsbrain/device-inventory.xlsx",
+    default=os.path.join(_config_dir(), "device-inventory.xlsx"),
     show_envvar=True,
     help="Excel 设备清单文件路径",
     type=click.Path(exists=True, dir_okay=False),
@@ -96,7 +115,7 @@ def inventory():
 @click.option(
     "--output", "-o",
     envvar="OPSBRAIN_INVENTORY_OUTPUT",
-    default="/var/lib/opsbrain/inventory/devices.json",
+    default=os.path.join(_data_dir(), "inventory", "devices.json"),
     show_envvar=True,
     help="设备清单输出路径",
 )
@@ -163,7 +182,7 @@ def _print_inventory_summary(devices: list[dict]) -> None:
 @click.option(
     "--inventory", "-i",
     envvar="OPSBRAIN_INVENTORY_OUTPUT",
-    default="/var/lib/opsbrain/inventory/devices.json",
+    default=os.path.join(_data_dir(), "inventory", "devices.json"),
     show_envvar=True,
     help="设备清单 JSON 路径",
 )
@@ -178,7 +197,7 @@ def _print_inventory_summary(devices: list[dict]) -> None:
 @click.option(
     "--output", "-o",
     envvar="OPSBRAIN_COLLECTED_DIR",
-    default="/var/lib/opsbrain/collected",
+    default=os.path.join(_data_dir(), "collected"),
     show_envvar=True,
     help="采集结果输出目录",
 )
@@ -229,14 +248,14 @@ def topology():
 @click.option(
     "--collected", "-c",
     envvar="OPSBRAIN_COLLECTED_DIR",
-    default="/var/lib/opsbrain/collected",
+    default=os.path.join(_data_dir(), "collected"),
     show_envvar=True,
     help="采集数据目录",
 )
 @click.option(
     "--output", "-o",
     envvar="OPSBRAIN_OUTPUT_DIR",
-    default="/var/lib/opsbrain/topology",
+    default=os.path.join(_data_dir(), "topology"),
     show_envvar=True,
     help="拓扑输出目录",
 )

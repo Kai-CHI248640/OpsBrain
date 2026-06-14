@@ -2,10 +2,27 @@
 
 from __future__ import annotations
 
+import os
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 from pydantic import BaseModel, Field
+
+
+def _data_dir() -> str:
+    env = os.environ.get("OPSBRAIN_HOME")
+    if env:
+        return env
+    if os.name == "nt":
+        return str(Path.home() / ".opsbrain")
+    return "/var/lib/opsbrain"
+
+
+def _config_dir() -> str:
+    if os.name == "nt":
+        return str(Path.home() / ".opsbrain" / "config")
+    return "/etc/opsbrain"
 
 
 # ── Auth ───────────────────────────────────────────────────────────────────
@@ -78,13 +95,13 @@ class ApiKeyUpdate(BaseModel):
 class ProjectConfigCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=128)
     description: str = Field(default="", max_length=256)
-    projects_path: str = Field(default="/var/lib/opsbrain/projects")
-    images_path: str = Field(default="/var/lib/opsbrain/images")
-    data_path: str = Field(default="/var/lib/opsbrain/data")
-    logs_path: str = Field(default="/var/lib/opsbrain/logs")
-    backup_path: str = Field(default="/var/lib/opsbrain/backups")
+    projects_path: str = Field(default_factory=lambda: f"{_data_dir()}/projects")
+    images_path: str = Field(default_factory=lambda: f"{_data_dir()}/images")
+    data_path: str = Field(default_factory=lambda: f"{_data_dir()}/data")
+    logs_path: str = Field(default_factory=lambda: f"{_data_dir()}/logs")
+    backup_path: str = Field(default_factory=lambda: f"{_data_dir()}/backups")
     docker_registry: str = Field(default="")
-    image_cache_path: str = Field(default="/var/lib/opsbrain/images/cache")
+    image_cache_path: str = Field(default_factory=lambda: f"{_data_dir()}/images/cache")
 
 
 class ProjectConfigUpdate(BaseModel):
@@ -104,14 +121,14 @@ class AgentConfigCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=128)
     description: str = Field(default="", max_length=256)
     agent_type: str = Field(default="oobm-topology", max_length=64)
-    skill_path: str = Field(default="/etc/opsbrain/agent/skills")
+    skill_path: str = Field(default_factory=lambda: f"{_config_dir()}/agent/skills")
     skill_files: str = Field(default="")
     model_config_id: str = Field(default="", max_length=32)
     max_workers: int = Field(default=10, ge=1, le=100)
     timeout: int = Field(default=300, ge=30, le=3600)
-    runtime_path: str = Field(default="/var/lib/opsbrain/agent/runtime")
-    log_path: str = Field(default="/var/lib/opsbrain/agent/logs")
-    state_path: str = Field(default="/var/lib/opsbrain/agent/state")
+    runtime_path: str = Field(default_factory=lambda: f"{_data_dir()}/agent/runtime")
+    log_path: str = Field(default_factory=lambda: f"{_data_dir()}/agent/logs")
+    state_path: str = Field(default_factory=lambda: f"{_data_dir()}/agent/state")
     is_enabled: bool = True
     auto_start: bool = False
 

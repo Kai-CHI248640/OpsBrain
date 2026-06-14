@@ -16,6 +16,24 @@ from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def _data_dir() -> Path:
+    env = os.environ.get("OPSBRAIN_HOME")
+    if env:
+        return Path(env)
+    if os.name == "nt":
+        return Path.home() / ".opsbrain"
+    return Path("/var/lib/opsbrain")
+
+
+def _config_dir() -> Path:
+    env = os.environ.get("OPSBRAIN_CONFIG")
+    if env:
+        return Path(env)
+    if os.name == "nt":
+        return Path.home() / ".opsbrain" / "config"
+    return Path("/etc/opsbrain")
+
+
 class LogLevel(str, Enum):
     DEBUG = "debug"
     INFO = "info"
@@ -69,11 +87,11 @@ class AppConfig(BaseSettings):
 
     # ── Inventory ─────────────────────────────────────────────────────
     inventory_file: Path = Field(
-        default=Path("/etc/opsbrain/device-inventory.xlsx"),
+        default_factory=lambda: _config_dir() / "device-inventory.xlsx",
         alias="OPSBRAIN_INVENTORY_FILE",
     )
     inventory_output: Path = Field(
-        default=Path("/var/lib/opsbrain/inventory/devices.json"),
+        default_factory=lambda: _data_dir() / "inventory" / "devices.json",
         alias="OPSBRAIN_INVENTORY_OUTPUT",
     )
     validate_strict: bool = Field(default=True, alias="OPSBRAIN_VALIDATE_STRICT")
@@ -91,7 +109,7 @@ class AppConfig(BaseSettings):
     device_timeout: int = Field(default=90, ge=15, le=300, alias="OPSBRAIN_DEVICE_TIMEOUT")
     enable_timeout: int = Field(default=10, alias="OPSBRAIN_ENABLE_TIMEOUT")
     collected_dir: Path = Field(
-        default=Path("/var/lib/opsbrain/collected"),
+        default_factory=lambda: _data_dir() / "collected",
         alias="OPSBRAIN_COLLECTED_DIR",
     )
 
@@ -101,13 +119,13 @@ class AppConfig(BaseSettings):
 
     # ── Parser ─────────────────────────────────────────────────────────
     parsed_dir: Path = Field(
-        default=Path("/var/lib/opsbrain/parsed"),
+        default_factory=lambda: _data_dir() / "parsed",
         alias="OPSBRAIN_PARSED_DIR",
     )
 
     # ── Topology ───────────────────────────────────────────────────────
     output_dir: Path = Field(
-        default=Path("/var/lib/opsbrain/topology"),
+        default_factory=lambda: _data_dir() / "topology",
         alias="OPSBRAIN_OUTPUT_DIR",
     )
     output_formats: list[str] = Field(
@@ -117,8 +135,8 @@ class AppConfig(BaseSettings):
     render_images: bool = Field(default=False, alias="OPSBRAIN_RENDER_IMAGES")
 
     # ── Paths ──────────────────────────────────────────────────────────
-    home_dir: Path = Field(default=Path("/var/lib/opsbrain"), alias="OPSBRAIN_HOME")
-    config_dir: Path = Field(default=Path("/etc/opsbrain"), alias="OPSBRAIN_CONFIG")
+    home_dir: Path = Field(default_factory=_data_dir, alias="OPSBRAIN_HOME")
+    config_dir: Path = Field(default_factory=_config_dir, alias="OPSBRAIN_CONFIG")
 
     # ── Model ────────────────────────────────────────────────────────
     model_enabled: bool = Field(default=True, alias="OPSBRAIN_MODEL_ENABLED")

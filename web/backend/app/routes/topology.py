@@ -151,43 +151,22 @@ async def delete_topology(topo_id: str, user: User = Depends(get_current_user)):
         await session.delete(topo)
         await session.commit()
 
-    # 重置 Commander Agent 记忆
-    from .agent_chat import _save_memory
-    _save_memory("commander", [])
+    # 重置 Agent 记忆
+    from .agent import _save_mem
+    _save_mem("agent", [])
 
-    return {"message": "Topology and bound subagent deleted, Commander memory reset", "id": topo_id}
+    return {"message": "Topology and bound subagent deleted, Agent memory reset", "id": topo_id}
 
 
 def _detect_local_subnets() -> list[str]:
     """自动检测本机所有网卡上的子网段"""
-    subnets: list[str] = []
-    try:
-        import ipaddress
-        import socket
-        import struct
-        with open("/proc/net/route", "r", encoding="utf-8", errors="ignore") as fh:
-            next(fh, None)
-            for line in fh:
-                parts = line.split()
-                if len(parts) < 8:
-                    continue
-                dest_hex, mask_hex = parts[1], parts[7]
-                if dest_hex == "00000000" or mask_hex == "00000000":
-                    continue
-                dest = socket.inet_ntoa(struct.pack("<L", int(dest_hex, 16)))
-                mask = socket.inet_ntoa(struct.pack("<L", int(mask_hex, 16)))
-                net = ipaddress.IPv4Network(f"{dest}/{mask}", strict=False)
-                if not str(net.network_address).startswith("127."):
-                    subnets.append(str(net))
-    except Exception:
-        pass
-    # 去重
-    return list(dict.fromkeys(subnets))
+    from platform_info import detect_local_subnets
+    return detect_local_subnets()
 
 
 @topology_router.post("/discover")
 async def run_discovery(data: dict):
-    """Commander Agent 内部调用的网络嗅探 API（无需认证，仅内部使用）"""
+    """Agent 内部调用的网络嗅探 API（无需认证，仅内部使用）"""
     method = data.get("method", "lan")
     target = data.get("target", "")
     username = data.get("username", "admin")

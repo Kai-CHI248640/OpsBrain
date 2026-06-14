@@ -524,14 +524,18 @@ async def _telnet_exec(host: str, port: int, user: str, pwd: str, cmd: str, time
 
 import os as _os
 
-_MEMORY_DIR = _os.environ.get("OPSBRAIN_HOME", "/var/lib/opsbrain") + "/memory"
+def _get_memory_dir() -> str:
+    from platform_info import get_data_dir
+    return str(get_data_dir() / "memory")
+
+_MEMORY_DIR = _get_memory_dir()
 _MAX_CONTEXT = 20  # 最多保留 20 条消息上下文
 
 
 def _memory_path(name: str) -> str:
     """记忆文件路径，类似 OpenClaw 的 memory/agent-name.json"""
     _os.makedirs(_MEMORY_DIR, exist_ok=True)
-    return _MEMORY_DIR + "/" + name + ".json"
+    return _os.path.join(_MEMORY_DIR, f"{name}.json")
 
 
 def _load_memory(name: str) -> list[dict]:

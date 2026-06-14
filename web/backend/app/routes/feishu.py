@@ -5,7 +5,7 @@
 2. 选择设置方式（扫码 / 手动输入）
 3. 配置凭证
 4. 测试连接
-5. 飞书只绑定总控 Commander Agent
+5. 飞书绑定 AI 运维助手
 """
 
 from __future__ import annotations
@@ -378,7 +378,7 @@ async def _ensure_bot_running():
     """从数据库加载配置并确保飞书机器人正在运行"""
     print("[FEISHU DEBUG] _ensure_bot_running called", flush=True)
     from ..bot_manager import start_bot, stop_bot, get_bot_instance
-    from .agent_chat import _feishu_message_handler
+    from .agent import _feishu_handler
     print("[FEISHU DEBUG] imports OK", flush=True)
 
     cfg = await _load_bot_config()
@@ -402,7 +402,7 @@ async def _ensure_bot_running():
     if ok:
         bot = get_bot_instance()
         if bot:
-            bot.set_handler(_feishu_message_handler)
+            bot.set_handler(_feishu_handler)
 
 
 async def _load_bot_config() -> dict | None:

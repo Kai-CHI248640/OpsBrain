@@ -608,8 +608,8 @@ function startCollection() {
   // ── 非种子模式：模拟进度（后续替换为真实采集） ──
   if (selectedMethod.value === 'local') {
     collectProgress.logs = [
-      { device: 'CPU 信息', status: 'pending', info: '读取 /proc/cpuinfo…' },
-      { device: '内存信息', status: 'pending', info: '读取 /proc/meminfo…' },
+      { device: 'CPU 信息', status: 'pending', info: '读取系统信息…' },
+      { device: '内存信息', status: 'pending', info: '读取内存信息…' },
       { device: '磁盘信息', status: 'pending', info: '读取磁盘用量…' },
       { device: '网络信息', status: 'pending', info: '获取 IP 和主机名…' },
     ]

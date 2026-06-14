@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
-import struct
 import socket
 import time
 from typing import Optional
@@ -40,29 +39,9 @@ VENDOR_BANNERS = {
 # ═══ 网络接口检测 ═════════════════════════════════════════════
 
 def get_local_subnets() -> list[str]:
-    """检测本机所有活跃网卡的子网（需要 host 网络模式）"""
-    subnets = []
-    try:
-        with open("/proc/net/route", "r", encoding="utf-8", errors="ignore") as fh:
-            next(fh, None)
-            for line in fh:
-                parts = line.split()
-                if len(parts) < 8:
-                    continue
-                dest_hex, mask_hex = parts[1], parts[7]
-                if dest_hex == "00000000" or mask_hex == "00000000":
-                    continue
-                dest = socket.inet_ntoa(struct.pack("<L", int(dest_hex, 16)))
-                mask = socket.inet_ntoa(struct.pack("<L", int(mask_hex, 16)))
-                net = ipaddress.IPv4Network(f"{dest}/{mask}", strict=False)
-                if not str(net.network_address).startswith("127."):
-                    subnets.append(str(net))
-    except Exception:
-        pass
-    # Fallback
-    if not subnets:
-        subnets = ["10.0.0.0/24", "172.16.0.0/24", "192.168.0.0/24", "192.168.1.0/24"]
-    return list(dict.fromkeys(subnets))
+    """检测本机所有活跃网卡的子网（跨平台）"""
+    from platform_info import detect_local_subnets
+    return detect_local_subnets()
 
 
 # ═══ TCP 端口探测（async，比 ping 可靠） ═════════════════════

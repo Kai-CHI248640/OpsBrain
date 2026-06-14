@@ -8,6 +8,7 @@ IDLE → LOADING → COLLECTING → CONVERGING → PARSING → LINKING → RENDE
 from __future__ import annotations
 
 import json
+import os
 import time
 from datetime import datetime
 from enum import Enum
@@ -18,7 +19,17 @@ from ..logging_setup import get_logger
 
 log = get_logger(__name__)
 
-STATE_FILE = "/var/lib/opsbrain/state.json"
+
+def _get_state_file() -> str:
+    env = os.environ.get("OPSBRAIN_HOME")
+    if env:
+        return os.path.join(env, "state.json")
+    if os.name == "nt":
+        return str(Path.home() / ".opsbrain" / "state.json")
+    return "/var/lib/opsbrain/state.json"
+
+
+STATE_FILE = _get_state_file()
 
 
 class Phase(str, Enum):

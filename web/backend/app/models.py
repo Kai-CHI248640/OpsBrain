@@ -6,8 +6,10 @@ SQLAlchemy ORM 模型：用户、设置、API Key、项目配置、Agent 配置�
 
 from __future__ import annotations
 
+import os
 import uuid
 from datetime import datetime
+from pathlib import Path
 
 from sqlalchemy import Column, String, Text, Boolean, DateTime, Integer, JSON, Float
 from sqlalchemy.orm import Mapped, mapped_column
@@ -21,6 +23,21 @@ def _uuid() -> str:
 
 def _now() -> datetime:
     return datetime.utcnow()
+
+
+def _data_dir() -> str:
+    env = os.environ.get("OPSBRAIN_HOME")
+    if env:
+        return env
+    if os.name == "nt":
+        return str(Path.home() / ".opsbrain")
+    return "/var/lib/opsbrain"
+
+
+def _config_dir() -> str:
+    if os.name == "nt":
+        return str(Path.home() / ".opsbrain" / "config")
+    return "/etc/opsbrain"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -136,15 +153,15 @@ class ProjectConfig(Base):
     description: Mapped[str] = mapped_column(String(256), default="")
 
     # 存储路径
-    projects_path: Mapped[str] = mapped_column(String(512), default="/var/lib/opsbrain/projects")
-    images_path: Mapped[str] = mapped_column(String(512), default="/var/lib/opsbrain/images")
-    data_path: Mapped[str] = mapped_column(String(512), default="/var/lib/opsbrain/data")
-    logs_path: Mapped[str] = mapped_column(String(512), default="/var/lib/opsbrain/logs")
-    backup_path: Mapped[str] = mapped_column(String(512), default="/var/lib/opsbrain/backups")
+    projects_path: Mapped[str] = mapped_column(String(512), default=f"{_data_dir()}/projects")
+    images_path: Mapped[str] = mapped_column(String(512), default=f"{_data_dir()}/images")
+    data_path: Mapped[str] = mapped_column(String(512), default=f"{_data_dir()}/data")
+    logs_path: Mapped[str] = mapped_column(String(512), default=f"{_data_dir()}/logs")
+    backup_path: Mapped[str] = mapped_column(String(512), default=f"{_data_dir()}/backups")
 
     # Docker 镜像存储
     docker_registry: Mapped[str] = mapped_column(String(256), default="")
-    image_cache_path: Mapped[str] = mapped_column(String(512), default="/var/lib/opsbrain/images/cache")
+    image_cache_path: Mapped[str] = mapped_column(String(512), default=f"{_data_dir()}/images/cache")
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
@@ -309,7 +326,7 @@ class AgentConfig(Base):
     # 支持的 agent 类型: oobm-topology | network-monitor | log-analyzer | custom
 
     # Agent 技能文件路径
-    skill_path: Mapped[str] = mapped_column(String(512), default="/etc/opsbrain/agent/skills")
+    skill_path: Mapped[str] = mapped_column(String(512), default=f"{_config_dir()}/agent/skills")
     skill_files: Mapped[str] = mapped_column(Text, default="")  # JSON list of files
 
     # Agent 配置
@@ -318,9 +335,9 @@ class AgentConfig(Base):
     timeout: Mapped[int] = mapped_column(Integer, default=300)
 
     # Agent 运行时
-    runtime_path: Mapped[str] = mapped_column(String(512), default="/var/lib/opsbrain/agent/runtime")
-    log_path: Mapped[str] = mapped_column(String(512), default="/var/lib/opsbrain/agent/logs")
-    state_path: Mapped[str] = mapped_column(String(512), default="/var/lib/opsbrain/agent/state")
+    runtime_path: Mapped[str] = mapped_column(String(512), default=f"{_data_dir()}/agent/runtime")
+    log_path: Mapped[str] = mapped_column(String(512), default=f"{_data_dir()}/agent/logs")
+    state_path: Mapped[str] = mapped_column(String(512), default=f"{_data_dir()}/agent/state")
 
     # 启用状态
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)

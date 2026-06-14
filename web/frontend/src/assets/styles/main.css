@@ -1,52 +1,74 @@
 /* ==========================================================================
-   OpsBrain Web — 全局样式
-   ==========================================================================
-   支持浅色/深色主题切换
+   OpsBrain Web — 全局样式 v2
    ========================================================================== */
 
 /* ─── CSS Variables ───────────────────────────────────────────────────── */
 
 :root,
 [data-theme="light"] {
-  --primary-color: #409eff;
-  --primary-hover: #66b1ff;
+  --primary-color: #3b82f6;
+  --primary-hover: #2563eb;
+  --primary-light: #eff6ff;
+  --success-color: #10b981;
+  --warning-color: #f59e0b;
+  --danger-color: #ef4444;
 
-  --bg-color: #ffffff;
-  --main-bg: #f5f7fa;
+  --bg-color: #f8fafc;
+  --main-bg: #f1f5f9;
   --header-bg: #ffffff;
   --sidebar-bg: #ffffff;
   --card-bg: #ffffff;
 
-  --text-color: #303133;
-  --text-secondary: #909399;
-  --border-color: #e4e7ed;
+  --text-color: #0f172a;
+  --text-secondary: #64748b;
+  --text-muted: #94a3b8;
+  --border-color: #e2e8f0;
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -2px rgba(0,0,0,0.05);
+  --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.08), 0 4px 6px -4px rgba(0,0,0,0.04);
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
 
   --el-bg-color: #ffffff;
   --el-bg-color-overlay: #ffffff;
-  --el-text-color-primary: #303133;
-  --el-border-color: #e4e7ed;
+  --el-text-color-primary: #0f172a;
+  --el-border-color: #e2e8f0;
+  --el-color-primary: #3b82f6;
 }
 
 [data-theme="dark"] {
-  --primary-color: #409eff;
-  --primary-hover: #66b1ff;
+  --primary-color: #60a5fa;
+  --primary-hover: #3b82f6;
+  --primary-light: #1e3a5f;
+  --success-color: #34d399;
+  --warning-color: #fbbf24;
+  --danger-color: #f87171;
 
-  --bg-color: #141414;
-  --main-bg: #161718;
-  --header-bg: #1d1e1f;
-  --sidebar-bg: #1d1e1f;
-  --card-bg: #1d1e1f;
+  --bg-color: #0f172a;
+  --main-bg: #1e293b;
+  --header-bg: #1e293b;
+  --sidebar-bg: #1e293b;
+  --card-bg: #1e293b;
 
-  --text-color: #e5eaf3;
-  --text-secondary: #a3a6ad;
-  --border-color: #363637;
+  --text-color: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --border-color: #334155;
 
-  --el-bg-color: #1d1e1f;
-  --el-bg-color-overlay: #1d1e1f;
-  --el-text-color-primary: #e5eaf3;
-  --el-border-color: #363637;
-  --el-fill-color-light: #262727;
-  --el-fill-color-blank: #1d1e1f;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.4), 0 2px 4px -2px rgba(0,0,0,0.3);
+  --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.5), 0 4px 6px -4px rgba(0,0,0,0.3);
+
+  --el-bg-color: #1e293b;
+  --el-bg-color-overlay: #1e293b;
+  --el-text-color-primary: #f1f5f9;
+  --el-border-color: #334155;
+  --el-fill-color-light: #334155;
+  --el-fill-color-blank: #1e293b;
+  --el-color-primary: #60a5fa;
 }
 
 /* ─── Base ───────────────────────────────────────────────────────────── */
@@ -59,10 +81,12 @@
 
 html, body {
   height: 100%;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, Helvetica, Arial, sans-serif;
   background: var(--bg-color);
   color: var(--text-color);
   transition: background-color 0.3s, color 0.3s;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 #app {
@@ -72,21 +96,31 @@ html, body {
 /* ─── Scrollbar ──────────────────────────────────────────────────────── */
 
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #90939940;
+  background: var(--text-muted);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #90939980;
+  background: var(--text-secondary);
 }
 
 /* ─── Element Plus overrides ─────────────────────────────────────────── */
+
+.el-card {
+  border-radius: var(--radius-md) !important;
+  border-color: var(--border-color) !important;
+  box-shadow: var(--shadow-sm) !important;
+  transition: box-shadow 0.2s ease;
+}
+.el-card:hover {
+  box-shadow: var(--shadow-md) !important;
+}
 
 [data-theme="dark"] .el-card {
   --el-card-bg-color: var(--card-bg);
@@ -95,8 +129,8 @@ html, body {
 
 [data-theme="dark"] .el-menu {
   --el-menu-bg-color: transparent;
-  --el-menu-text-color: var(--text-color);
-  --el-menu-hover-bg-color: #262727;
+  --el-menu-text-color: var(--text-secondary);
+  --el-menu-hover-bg-color: var(--primary-light);
   --el-menu-active-color: var(--primary-color);
   border: none;
 }
@@ -111,10 +145,11 @@ html, body {
 
 [data-theme="dark"] .el-dialog {
   --el-dialog-bg-color: var(--card-bg);
+  border-radius: var(--radius-lg) !important;
 }
 
 [data-theme="dark"] .el-breadcrumb {
-  --el-breadcrumb-text-color: var(--text-secondary);
+  --el-breadcrumb-text-color: var(--text-muted);
 }
 
 [data-theme="dark"] .el-descriptions {
@@ -139,18 +174,43 @@ html, body {
   border-top-color: var(--border-color);
 }
 
+.el-button--primary {
+  --el-button-bg-color: var(--primary-color);
+  --el-button-border-color: var(--primary-color);
+  --el-button-hover-bg-color: var(--primary-hover);
+  --el-button-hover-border-color: var(--primary-hover);
+  border-radius: var(--radius-sm) !important;
+}
+
+.el-input__wrapper {
+  border-radius: var(--radius-sm) !important;
+}
+
+.el-tag {
+  border-radius: var(--radius-sm) !important;
+}
+
+/* ─── Utility classes ────────────────────────────────────────────────── */
+
+.glass-card {
+  background: var(--card-bg);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, var(--primary-color), #8b5cf6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    移动端适配
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ─── 响应式断点 ── */
-:root {
-  --mobile-breakpoint: 768px;
-  --tablet-breakpoint: 1024px;
-}
-
-/* ─── 小屏幕：表格水平滚动 ── */
 @media (max-width: 768px) {
   .el-table {
     overflow-x: auto;
@@ -160,37 +220,26 @@ html, body {
     overflow-x: auto !important;
   }
 
-  /* 隐藏面包屑节省空间 */
   .el-breadcrumb {
     font-size: 12px;
   }
 
-  /* 让 el-card padding 更紧凑 */
   .el-card__body {
     padding: 12px !important;
   }
 
-  /* 页面内边距缩小 */
   .app-main {
     padding: 12px !important;
   }
 
-  /* 页面标题缩小 */
   h2 {
     font-size: 18px;
   }
 
-  /* 描述文字行内展示 */
-  .subtitle {
-    font-size: 12px;
-  }
-
-  /* 步骤条简化 */
   .el-step__description {
     display: none !important;
   }
 
-  /* el-tabs 左标签 → 上标签 */
   .el-tabs--left .el-tabs__header {
     float: none !important;
     width: 100% !important;
@@ -211,7 +260,7 @@ html, body {
   }
   .el-alert { padding: 6px 12px; }
   .el-alert__title { font-size: 13px; }
-  .el-dialog { width: 95vw !important; max-width: 500px !important; }
+  .el-dialog { width: 95vw !important; max-width: 500px !important; border-radius: var(--radius-md) !important; }
   .el-descriptions__label, .el-descriptions__content { font-size: 12px; padding: 6px 8px; }
   .el-form-item { margin-bottom: 12px; }
   .el-form-item__label { font-size: 13px; }
@@ -220,7 +269,6 @@ html, body {
   .el-timeline-item__timestamp { font-size: 11px; }
 }
 
-/* ─── 平板优化 ── */
 @media (max-width: 1024px) and (min-width: 769px) {
   .app-main {
     padding: 16px !important;

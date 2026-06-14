@@ -59,21 +59,21 @@ let edgesDataset = null
 const selectedNode = ref(null)
 const popupStyle = ref({})
 
-// ── Obsidian 风格颜色方案 ──────────────────────────────────────────
+// ── 颜色方案 ──────────────────────────────────────────
 const THEME = {
-  bg: '#1e1e2e',        // 深色背景
+  bg: 'var(--main-bg)',
   nodeColors: {
-    router: '#89b4fa',   // 蓝色
-    switch: '#a6e3a1',   // 绿色
-    firewall: '#fab387', // 橙色
-    server: '#cba6f7',   // 紫色
-    ap: '#f38ba8',       // 粉色
-    unknown: '#6c7086',  // 灰色
+    router: '#3b82f6',
+    switch: '#10b981',
+    firewall: '#f59e0b',
+    server: '#8b5cf6',
+    ap: '#ec4899',
+    unknown: '#94a3b8',
   },
-  edgeColor: '#45475a',
-  edgeHighlight: '#89b4fa',
-  fontColor: '#cdd6f4',
-  glowColor: 'rgba(137, 180, 250, 0.15)',
+  edgeColor: 'var(--border-color)',
+  edgeHighlight: 'var(--primary-color)',
+  fontColor: 'var(--text-color)',
+  glowColor: 'rgba(59, 130, 246, 0.15)',
 }
 
 function deviceIcon(type) {
