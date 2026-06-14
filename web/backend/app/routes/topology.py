@@ -248,10 +248,10 @@ async def run_discovery(data: dict):
                     return None
                 login = "ssh" if "ssh" in open_ports else ("telnet" if "telnet" in open_ports else None)
                 dev_type = "unknown"
-                if "snmp" in open_ports and ("http" in open_ports or "https" in open_ports):
+                if login and "snmp" in open_ports:
                     dev_type = "router"
-                elif "http" in open_ports and not login:
-                    dev_type = "router"
+                elif "snmp" in open_ports:
+                    dev_type = "switch"
                 is_local = host in local_ips
                 dev_name = f"本机 ({host})" if is_local else f"Device-{host}"
                 return {
