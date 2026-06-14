@@ -14,7 +14,8 @@
     "install:all": "npm install && cd web/frontend && npm install",
     "install:python": "venv\\Scripts\\pip.exe install -r web/backend/requirements.txt",
     "setup": "npm run install:all && npm run install:python && echo. && echo [OK] Dependencies installed. Run 'npm run dev' to start.",
-    "setup:win": "npm run install:all && npm run install:python"
+    "setup:win": "npm run install:all && npm run install:python",
+    "init": "node scripts/init.js"
   },
   "devDependencies": {
     "concurrently": "^8.2.0"

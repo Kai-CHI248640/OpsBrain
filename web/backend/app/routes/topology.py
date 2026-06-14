@@ -7,6 +7,7 @@ OpsBrain Web — Topology Save/Load Routes
 from __future__ import annotations
 
 import json as _json
+import os
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -173,93 +174,96 @@ async def run_discovery(data: dict):
     password = data.get("password", "")
 
     try:
-        # ── 自动检测所有网卡子网 ──
-        import sys, os, asyncio as _aio, ipaddress, socket
+        import subprocess, ipaddress, socket, asyncio as _aio
+        from platform_info import get_gateway_ip
 
+        # ── 检测子网 ──
         target_subnets: list[str] = []
         if target:
-            # 用户指定了 target，就用指定的
             try:
                 net = ipaddress.ip_network(target, strict=False)
                 target_subnets.append(str(net))
             except ValueError:
-                # 可能是单个 IP，直接使用
                 target_subnets.append(target)
         else:
-            # 自动检测本地所有网卡子网
-            detected = _detect_local_subnets()
-            if detected:
-                target_subnets = detected
-            else:
-                # 回退：尝试常见私有网段
-                target_subnets = ["10.0.0.0/24", "172.16.0.0/24", "172.17.0.0/24",
-                                 "192.168.0.0/24", "192.168.1.0/24", "192.168.2.0/24"]
+            target_subnets = _detect_local_subnets() or [
+                "10.0.0.0/24", "172.16.0.0/24", "192.168.0.0/24", "192.168.1.0/24"]
 
-        scanned_hosts: list[str] = []
-        for subnet_str in target_subnets[:3]:  # 最多3个子网
+        # ── 生成主机列表 ──
+        hosts: list[str] = []
+        for subnet_str in target_subnets[:3]:
             try:
                 net = ipaddress.ip_network(subnet_str, strict=False)
-                all_hosts = [str(h) for h in net.hosts()]
-                if len(all_hosts) > 256:
-                    scanned_hosts.extend(all_hosts[:256])
-                else:
-                    scanned_hosts.extend(all_hosts)
+                for h in net.hosts():
+                    if str(h) not in hosts:
+                        hosts.append(str(h))
+                    if len(hosts) >= 256:
+                        break
             except ValueError:
-                scanned_hosts.append(subnet_str)
+                hosts.append(subnet_str)
+            if len(hosts) >= 256:
+                break
 
-        # 确保网关 IP 在扫描列表中
-        from platform_info import get_gateway_ip
         gw = get_gateway_ip()
-        if gw and gw not in scanned_hosts:
-            scanned_hosts.insert(0, gw)
+        if gw and gw not in hosts:
+            hosts.insert(0, gw)
 
-        # 去重 + 总量限制
-        seen = set()
-        hosts = []
-        for h in scanned_hosts:
-            if h not in seen:
-                seen.add(h)
-                hosts.append(h)
-                if len(hosts) >= 256:
-                    break
+        # ── 批量 ping（在独立线程中运行，不阻塞事件循环） ──
+        def _batch_ping(ip_list: list[str]) -> list[str]:
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            def _ping_one(ip: str) -> str | None:
+                try:
+                    r = subprocess.run(
+                        ["ping", "-n", "1", "-w", "500", ip],
+                        capture_output=True, text=True, timeout=3
+                    )
+                    if "TTL=" in r.stdout:
+                        return ip
+                except Exception:
+                    pass
+                return None
+            online = []
+            with ThreadPoolExecutor(max_workers=60) as pool:
+                for result in pool.map(_ping_one, ip_list):
+                    if result:
+                        online.append(result)
+            return online
 
-        # 并发 TCP 扫描（semaphore=100，timeout=0.5s）
-        sem = _aio.Semaphore(100)
+        loop = _aio.get_running_loop()
+        online_ips = await loop.run_in_executor(None, _batch_ping, hosts)
+        log.info(f"Ping完成，在线: {len(online_ips)}, IPs: {online_ips[:10]}")
 
-        async def _probe(host: str) -> dict | None:
-            async with sem:
-                open_ports = {}
-                probe_ports = [(22, "ssh"), (23, "telnet"), (80, "http"),
-                               (443, "https"), (161, "snmp"), (8080, "http"), (8443, "https")]
-                for port, svc_name in probe_ports:
-                    try:
-                        _, w = await _aio.wait_for(_aio.open_connection(host, port), timeout=0.5)
-                        w.close()
-                        await w.wait_closed()
-                        open_ports[svc_name] = port
-                    except Exception:
-                        pass
-                if not open_ports:
-                    return None
-                login = "ssh" if "ssh" in open_ports else ("telnet" if "telnet" in open_ports else None)
-                dev_type = "unknown"
-                if "snmp" in open_ports and ("http" in open_ports or "https" in open_ports):
-                    dev_type = "router"
-                elif "http" in open_ports and not login:
-                    dev_type = "router"
-                return {
-                    "name": f"Device-{host}", "ip": host,
-                    "type": dev_type, "vendor": "unknown",
-                    "loginMethod": login,
-                    "username": username if login else "", "password": password or "" if login else "",
-                    "status": "online",
-                    "port": open_ports.get(login, 0) if login else 0,
-                    "open_ports": open_ports,
-                }
+        # ── 对在线IP做TCP端口扫描 ──
+        devices: list[dict] = []
+        for ip in online_ips:
+            open_ports = {}
+            for port, svc_name in [(22, "ssh"), (23, "telnet"), (80, "http"),
+                                   (443, "https"), (161, "snmp"), (8080, "http"), (8443, "https")]:
+                try:
+                    _, w = await _aio.wait_for(_aio.open_connection(ip, port), timeout=1.0)
+                    w.close()
+                    await w.wait_closed()
+                    open_ports[svc_name] = port
+                except Exception:
+                    pass
 
-        tasks = [_probe(h) for h in hosts]
-        results = await _aio.gather(*tasks)
-        devices = [d for d in results if d is not None]
+            login = "ssh" if "ssh" in open_ports else ("telnet" if "telnet" in open_ports else None)
+            dev_type = "unknown"
+            if "snmp" in open_ports and ("http" in open_ports or "https" in open_ports):
+                dev_type = "router"
+            elif "http" in open_ports and not login:
+                dev_type = "router"
+            devices.append({
+                "name": f"Device-{ip}", "ip": ip,
+                "type": dev_type, "vendor": "unknown",
+                "loginMethod": login,
+                "username": username if login else "", "password": password or "" if login else "",
+                "status": "online",
+                "port": open_ports.get(login, 0) if login else 0,
+                "open_ports": open_ports,
+            })
+
+        log.info(f"扫描完成，发现 {len(devices)} 台设备")
 
         # ── 生成拓扑连线（星形：所有设备连网关） ──
         links = []
@@ -291,7 +295,6 @@ async def run_discovery(data: dict):
                 })
 
         # 深度嗅探：尝试 SSH 获取设备信息
-        links, analysis = [], ""
         runtime = get_network_runtime_data()
 
         if devices and password:

@@ -136,26 +136,43 @@ def detect_local_subnets() -> list[str]:
 
 
 def get_gateway_ip() -> str | None:
-    """Get the default gateway IP address."""
+    """Get the default gateway IP address (优先返回局域网网关)."""
     import subprocess
+    gateways = []
     try:
         if os.name == "nt":
             result = subprocess.run(["ipconfig"], capture_output=True, text=True, timeout=5)
+            current_ip = ""
             for line in result.stdout.splitlines():
+                if "IPv4 Address" in line:
+                    parts = line.split(":")
+                    if len(parts) >= 2:
+                        current_ip = parts[-1].strip()
                 if "默认网关" in line or "Default Gateway" in line:
                     parts = line.split(":")
                     if len(parts) >= 2:
                         gw = parts[-1].strip()
                         if gw and gw != "0.0.0.0":
-                            return gw
+                            gateways.append((current_ip, gw))
         else:
             result = subprocess.run(["ip", "route", "show", "default"], capture_output=True, text=True, timeout=5)
             parts = result.stdout.split()
             if "via" in parts:
-                return parts[parts.index("via") + 1]
+                gateways.append(("", parts[parts.index("via") + 1]))
     except Exception:
         pass
-    return None
+    
+    if not gateways:
+        return None
+    
+    # 优先返回局域网网关（192.168.x.x, 10.x.x.x, 172.16-31.x.x）
+    for ip, gw in gateways:
+        if gw.startswith("192.168.") or gw.startswith("10.") or \
+           any(gw.startswith(f"172.{i}.") for i in range(16, 32)):
+            return gw
+    
+    # 如果没有局域网网关，返回第一个
+    return gateways[0][1]
 
 
 def _subnets_windows() -> list[str]:
@@ -164,6 +181,9 @@ def _subnets_windows() -> list[str]:
         for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
             ip = info[4][0]
             if ip.startswith("127."):
+                continue
+            # 过滤掉VPN和虚拟网卡的IP
+            if ip.startswith("198.18.") or ip.startswith("172.21."):
                 continue
             try:
                 net = ipaddress.IPv4Network(f"{ip}/24", strict=False)

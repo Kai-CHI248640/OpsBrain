@@ -17,17 +17,13 @@
 git clone https://github.com/Kai-CHI248640/OpsBrain.git
 cd OpsBrain
 
-# 2. 创建 Python 虚拟环境
-python -m venv venv
-.\venv\Scripts\activate
+# 2. 一键初始化（创建虚拟环境 + 安装所有依赖）
+npm run init
 
-# 3. 安装所有依赖（Node + Python）
-npm run setup
-
-# 4. 启动开发环境（前端 + 后端）
+# 3. 启动开发环境（前端 + 后端）
 npm run dev
 
-# 5. 访问
+# 4. 访问
 # 前端: http://localhost:3000
 # API:  http://localhost:8000/docs
 ```
@@ -39,14 +35,10 @@ npm run dev
 git clone https://github.com/Kai-CHI248640/OpsBrain.git
 cd OpsBrain
 
-# 2. 创建 Python 虚拟环境
-python3 -m venv venv
-source venv/bin/activate
+# 2. 一键初始化（创建虚拟环境 + 安装所有依赖）
+npm run init
 
-# 3. 安装依赖
-npm run setup
-
-# 4. 启动
+# 3. 启动
 npm run dev
 ```
 
