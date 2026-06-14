@@ -60,21 +60,30 @@ const selectedNode = ref(null)
 const popupStyle = ref({})
 
 // ── 颜色方案 ──────────────────────────────────────────
-const THEME = {
-  bg: 'var(--main-bg)',
-  nodeColors: {
-    router: '#3b82f6',
-    switch: '#10b981',
-    firewall: '#f59e0b',
-    server: '#8b5cf6',
-    ap: '#ec4899',
-    unknown: '#94a3b8',
-  },
-  edgeColor: 'var(--border-color)',
-  edgeHighlight: 'var(--primary-color)',
-  fontColor: 'var(--text-color)',
-  glowColor: 'rgba(59, 130, 246, 0.15)',
+function isDark() {
+  return document.documentElement.getAttribute('data-theme') === 'dark'
 }
+
+function getTheme() {
+  const dark = isDark()
+  return {
+    bg: dark ? '#1e293b' : '#f1f5f9',
+    nodeColors: {
+      router: '#3b82f6',
+      switch: '#10b981',
+      firewall: '#f59e0b',
+      server: '#8b5cf6',
+      ap: '#ec4899',
+      unknown: '#94a3b8',
+    },
+    edgeColor: dark ? '#94a3b8' : '#94a3b8',
+    edgeHighlight: dark ? '#e2e8f0' : '#334155',
+    fontColor: dark ? '#f1f5f9' : '#0f172a',
+    glowColor: dark ? 'rgba(96, 165, 250, 0.15)' : 'rgba(59, 130, 246, 0.1)',
+  }
+}
+
+const THEME = getTheme()
 
 function deviceIcon(type) {
   return { router: '🌐', switch: '🔀', firewall: '🛡️', server: '🖥️', ap: '📶', unknown: '📡' }[type] || '📡'
@@ -91,6 +100,8 @@ function statusColor(status) {
 // ── 初始化 vis-network ─────────────────────────────────────────────
 function initNetwork() {
   if (!containerRef.value) return
+
+  const THEME = getTheme()
 
   const visNodes = props.nodes.map(n => ({
     id: n.name || n.id,
@@ -287,7 +298,7 @@ function initNetwork() {
 }
 
 function nodeColor(n) {
-  return THEME.nodeColors[n.type] || THEME.nodeColors.unknown
+  return getTheme().nodeColors[n.type] || getTheme().nodeColors.unknown
 }
 
 function nodeSize(n) {
@@ -381,11 +392,22 @@ watch(() => [props.nodes, props.links], () => {
   nextTick(() => initNetwork())
 }, { deep: true })
 
-onMounted(() => {
+// Watch for theme changes
+const themeObserver = new MutationObserver(() => {
+  if (network) {
+    network.destroy()
+    network = null
+  }
   nextTick(() => initNetwork())
 })
 
+onMounted(() => {
+  nextTick(() => initNetwork())
+  themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+})
+
 onBeforeUnmount(() => {
+  themeObserver.disconnect()
   if (network) {
     network.destroy()
     network = null
@@ -401,10 +423,10 @@ defineExpose({ fitView, restartPhysics, resetView })
   position: relative;
   width: 100%;
   height: 500px;
-  background: #1e1e2e;
+  background: var(--main-bg);
   border-radius: 8px;
   overflow: hidden;
-  border: 1px solid #313244;
+  border: 1px solid var(--border-color);
 }
 
 .graph-controls {
@@ -418,29 +440,29 @@ defineExpose({ fitView, restartPhysics, resetView })
 }
 
 .graph-controls :deep(.el-button) {
-  background: rgba(49, 50, 68, 0.9);
-  border-color: #45475a;
-  color: #cdd6f4;
+  background: var(--card-bg);
+  border-color: var(--border-color);
+  color: var(--text-color);
   backdrop-filter: blur(4px);
 }
 
 .graph-controls :deep(.el-button:hover) {
-  background: #45475a;
-  border-color: #585b70;
-  color: #cdd6f4;
+  background: var(--border-color);
+  border-color: var(--text-muted);
+  color: var(--text-color);
 }
 
 /* ── Node popup ── */
 .node-popup {
   position: absolute;
   z-index: 20;
-  background: rgba(30, 30, 46, 0.95);
-  border: 1px solid #45475a;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   padding: 12px;
   width: 200px;
   backdrop-filter: blur(8px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-lg);
 }
 
 .popup-header {
@@ -449,14 +471,14 @@ defineExpose({ fitView, restartPhysics, resetView })
   gap: 6px;
   margin-bottom: 8px;
   padding-bottom: 8px;
-  border-bottom: 1px solid #313244;
-  color: #cdd6f4;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-color);
   font-size: 13px;
 }
 
 .popup-header .el-button {
   margin-left: auto;
-  color: #6c7086;
+  color: var(--text-muted);
 }
 
 .popup-icon { font-size: 18px; }
@@ -472,16 +494,16 @@ defineExpose({ fitView, restartPhysics, resetView })
   display: flex;
   justify-content: space-between;
   font-size: 11px;
-  color: #a6adc8;
+  color: var(--text-secondary);
 }
 
-.popup-row span:first-child { color: #6c7086; }
+.popup-row span:first-child { color: var(--text-muted); }
 
 .popup-actions {
   display: flex;
   gap: 6px;
   padding-top: 8px;
-  border-top: 1px solid #313244;
+  border-top: 1px solid var(--border-color);
 }
 
 .popup-actions :deep(.el-button) {
