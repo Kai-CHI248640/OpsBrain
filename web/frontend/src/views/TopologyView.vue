@@ -487,7 +487,7 @@ function startDiscovery() {
   if (selectedMethod.value === 'lan') {
     api.post('/topology/discover', {
       method: 'lan', username: 'admin', password: '',
-    }).then(res => {
+    }, { timeout: 180000 }).then(res => {
       const data = res.data
       if (!data.ok) { ElMessage.error(data.error || '嗅探失败'); discovering.value = false; return }
       if (data.runtime) Object.assign(networkRuntime, data.runtime)

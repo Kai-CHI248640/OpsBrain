@@ -135,6 +135,29 @@ def detect_local_subnets() -> list[str]:
     return _subnets_linux()
 
 
+def get_gateway_ip() -> str | None:
+    """Get the default gateway IP address."""
+    import subprocess
+    try:
+        if os.name == "nt":
+            result = subprocess.run(["ipconfig"], capture_output=True, text=True, timeout=5)
+            for line in result.stdout.splitlines():
+                if "默认网关" in line or "Default Gateway" in line:
+                    parts = line.split(":")
+                    if len(parts) >= 2:
+                        gw = parts[-1].strip()
+                        if gw and gw != "0.0.0.0":
+                            return gw
+        else:
+            result = subprocess.run(["ip", "route", "show", "default"], capture_output=True, text=True, timeout=5)
+            parts = result.stdout.split()
+            if "via" in parts:
+                return parts[parts.index("via") + 1]
+    except Exception:
+        pass
+    return None
+
+
 def _subnets_windows() -> list[str]:
     subnets = []
     try:

@@ -207,6 +207,12 @@ async def run_discovery(data: dict):
             except ValueError:
                 scanned_hosts.append(subnet_str)
 
+        # 确保网关 IP 在扫描列表中
+        from platform_info import get_gateway_ip
+        gw = get_gateway_ip()
+        if gw and gw not in scanned_hosts:
+            scanned_hosts.insert(0, gw)
+
         # 去重 + 总量限制
         seen = set()
         hosts = []
@@ -217,8 +223,8 @@ async def run_discovery(data: dict):
                 if len(hosts) >= 256:
                     break
 
-        # 并发 TCP 扫描（semaphore=50，timeout=1s）
-        sem = _aio.Semaphore(50)
+        # 并发 TCP 扫描（semaphore=100，timeout=0.5s）
+        sem = _aio.Semaphore(100)
 
         async def _probe(host: str) -> dict | None:
             async with sem:
@@ -227,7 +233,7 @@ async def run_discovery(data: dict):
                                (443, "https"), (161, "snmp"), (8080, "http"), (8443, "https")]
                 for port, svc_name in probe_ports:
                     try:
-                        _, w = await _aio.wait_for(_aio.open_connection(host, port), timeout=0.8)
+                        _, w = await _aio.wait_for(_aio.open_connection(host, port), timeout=0.5)
                         w.close()
                         await w.wait_closed()
                         open_ports[svc_name] = port
