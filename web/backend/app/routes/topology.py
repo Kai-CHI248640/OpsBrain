@@ -207,15 +207,11 @@ async def run_discovery(data: dict):
             except ValueError:
                 scanned_hosts.append(subnet_str)
 
-        # 确保网关 IP 和本机 IP 在扫描列表中
-        from platform_info import get_gateway_ip, get_local_ips
+        # 确保网关 IP 在扫描列表中
+        from platform_info import get_gateway_ip
         gw = get_gateway_ip()
         if gw and gw not in scanned_hosts:
             scanned_hosts.insert(0, gw)
-        local_ips = get_local_ips()
-        for lip in local_ips:
-            if lip not in scanned_hosts:
-                scanned_hosts.append(lip)
 
         # 去重 + 总量限制
         seen = set()
@@ -234,8 +230,7 @@ async def run_discovery(data: dict):
             async with sem:
                 open_ports = {}
                 probe_ports = [(22, "ssh"), (23, "telnet"), (80, "http"),
-                               (443, "https"), (161, "snmp"), (8000, "http"),
-                               (8080, "http"), (8443, "https")]
+                               (443, "https"), (161, "snmp"), (8080, "http"), (8443, "https")]
                 for port, svc_name in probe_ports:
                     try:
                         _, w = await _aio.wait_for(_aio.open_connection(host, port), timeout=0.5)
@@ -252,17 +247,14 @@ async def run_discovery(data: dict):
                     dev_type = "router"
                 elif "http" in open_ports and not login:
                     dev_type = "router"
-                is_local = host in local_ips
-                dev_name = f"本机 ({host})" if is_local else f"Device-{host}"
                 return {
-                    "name": dev_name, "ip": host,
+                    "name": f"Device-{host}", "ip": host,
                     "type": dev_type, "vendor": "unknown",
                     "loginMethod": login,
                     "username": username if login else "", "password": password or "" if login else "",
                     "status": "online",
                     "port": open_ports.get(login, 0) if login else 0,
                     "open_ports": open_ports,
-                    "local": is_local,
                 }
 
         tasks = [_probe(h) for h in hosts]
