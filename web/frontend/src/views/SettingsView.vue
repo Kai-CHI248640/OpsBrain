@@ -93,7 +93,7 @@
                   :type="providerTagType(row.provider)"
                   size="small"
                   effect="plain"
-                >{{ row.provider }}</el-tag>
+                >{{ PROVIDERS[row.provider]?.name || row.provider }}</el-tag>
               </template>
             </el-table-column>
             <el-table-column prop="model" label="模型" width="120" />
@@ -127,27 +127,25 @@
           <el-dialog
             v-model="showAddApi"
             title="新增 API Key"
-            width="520px"
+            width="560px"
             :close-on-click-modal="false"
           >
             <el-form :model="apiForm" label-width="100px">
-              <el-form-item label="名称" required>
-                <el-input v-model="apiForm.name" placeholder="如：生产 DeepSeek" />
-              </el-form-item>
               <el-form-item label="提供商" required>
-                <el-select v-model="apiForm.provider" style="width: 100%">
-                  <el-option label="OpenAI" value="openai" />
-                  <el-option label="DeepSeek" value="deepseek" />
-                  <el-option label="SiliconFlow" value="siliconflow" />
-                  <el-option label="Anthropic" value="anthropic" />
-                  <el-option label="Ollama（本地）" value="ollama" />
-                  <el-option label="自定义（兼容 OpenAI）" value="custom" />
+                <el-select v-model="apiForm.provider" style="width: 100%" @change="onProviderChange">
+                  <el-option v-for="(p, k) in PROVIDERS" :key="k" :label="p.name" :value="k">
+                    <span>{{ p.name }}</span>
+                    <span style="color: #909399; font-size: 12px; margin-left: 8px">{{ p.desc }}</span>
+                  </el-option>
                 </el-select>
               </el-form-item>
-              <el-form-item label="API 地址">
-                <el-input v-model="apiForm.api_base" placeholder="留空使用提供商默认地址" />
+              <el-form-item label="名称" required>
+                <el-input v-model="apiForm.name" :placeholder="'如：' + currentProvider.name + ' 生产环境'" />
               </el-form-item>
-              <el-form-item label="API Key" required>
+              <el-form-item label="API 地址">
+                <el-input v-model="apiForm.api_base" :placeholder="currentProvider.api_base || '输入 API Base URL'" />
+              </el-form-item>
+              <el-form-item v-if="currentProvider.need_key" label="API Key" required>
                 <el-input
                   v-model="apiForm.api_key"
                   type="password"
@@ -162,7 +160,17 @@
                 </el-select>
               </el-form-item>
               <el-form-item label="默认模型">
-                <el-input v-model="apiForm.model" placeholder="留空使用提供商默认模型" />
+                <el-select
+                  v-if="currentProvider.models.length > 0"
+                  v-model="apiForm.model"
+                  filterable
+                  allow-create
+                  style="width: 100%"
+                  placeholder="选择或输入模型名称"
+                >
+                  <el-option v-for="m in currentProvider.models" :key="m" :label="m" :value="m" />
+                </el-select>
+                <el-input v-else v-model="apiForm.model" placeholder="输入模型名称" />
               </el-form-item>
               <el-form-item label="设为默认">
                 <el-switch v-model="apiForm.is_default" />
@@ -638,6 +646,58 @@ function resetProjectConfig() {
 }
 
 // ── API Key ───────────────────────────────────────────────────────────
+const PROVIDERS = {
+  openai: {
+    name: 'OpenAI',
+    api_base: 'https://api.openai.com/v1',
+    models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'],
+    need_key: true,
+    desc: 'OpenAI 官方 API',
+  },
+  deepseek: {
+    name: 'DeepSeek',
+    api_base: 'https://api.deepseek.com/v1',
+    models: ['deepseek-chat', 'deepseek-coder', 'deepseek-reasoner'],
+    need_key: true,
+    desc: 'DeepSeek 官方 API，国内访问快',
+  },
+  siliconflow: {
+    name: 'SiliconFlow',
+    api_base: 'https://api.siliconflow.cn/v1',
+    models: ['deepseek-ai/DeepSeek-V3', 'Qwen/Qwen2.5-72B-Instruct', 'meta-llama/Meta-Llama-3.1-70B-Instruct'],
+    need_key: true,
+    desc: 'SiliconFlow 聚合平台，支持多种开源模型',
+  },
+  anthropic: {
+    name: 'Anthropic',
+    api_base: 'https://api.anthropic.com/v1',
+    models: ['claude-sonnet-4-20250514', 'claude-3-5-haiku-20241022'],
+    need_key: true,
+    desc: 'Anthropic Claude 系列模型',
+  },
+  mimo: {
+    name: 'MiMo',
+    api_base: 'https://token-plan-cn.xiaomimimo.com/v1',
+    models: ['mimo-v2.5-pro', 'mimo-v2.5'],
+    need_key: true,
+    desc: '小米 MiMo 大模型',
+  },
+  ollama: {
+    name: 'Ollama（本地）',
+    api_base: 'http://localhost:11434/v1',
+    models: ['llama3', 'qwen2.5', 'deepseek-r1', 'mistral'],
+    need_key: false,
+    desc: '本地 Ollama 服务，无需 API Key',
+  },
+  custom: {
+    name: '自定义',
+    api_base: '',
+    models: [],
+    need_key: true,
+    desc: '兼容 OpenAI API 格式的自定义服务',
+  },
+}
+
 const apiList = ref([])
 const showAddApi = ref(false)
 const savingApi = ref(false)
@@ -645,6 +705,17 @@ const apiForm = reactive({
   name: '', provider: 'deepseek', api_base: '',
   api_key: '', api_type: 'llm', model: '', is_default: false,
 })
+
+const currentProvider = computed(() => PROVIDERS[apiForm.provider] || PROVIDERS.custom)
+
+function onProviderChange(provider) {
+  const p = PROVIDERS[provider]
+  if (!p) return
+  apiForm.api_base = p.api_base
+  if (p.models.length > 0) apiForm.model = p.models[0]
+  if (!p.need_key) apiForm.api_key = 'ollama-local'
+  if (!apiForm.name) apiForm.name = p.name
+}
 
 async function loadApis() {
   try {
@@ -661,7 +732,7 @@ async function saveApi() {
     await api.post('/apis/', { ...apiForm })
     ElMessage.success('API Key 已添加')
     showAddApi.value = false
-    Object.assign(apiForm, { name: '', provider: 'deepseek', api_base: '', api_key: '', api_type: 'llm', model: '', is_default: false })
+    Object.assign(apiForm, { name: '', provider: 'deepseek', api_base: 'https://api.deepseek.com/v1', api_key: '', api_type: 'llm', model: 'deepseek-chat', is_default: false })
     await loadApis()
   } catch (e) {
     ElMessage.error(e.response?.data?.detail || '保存失败')
@@ -699,7 +770,7 @@ async function deleteApi(row) {
 }
 
 function providerTagType(provider) {
-  const map = { openai: '', deepseek: 'success', siliconflow: 'warning', ollama: 'info', custom: 'danger' }
+  const map = { openai: '', deepseek: 'success', siliconflow: 'warning', anthropic: 'info', mimo: 'warning', ollama: 'info', custom: 'danger' }
   return map[provider] || 'info'
 }
 
