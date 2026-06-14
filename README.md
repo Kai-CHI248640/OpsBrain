@@ -122,6 +122,24 @@ opsbrain/
 | Linux | 🔄 计划中 |
 | macOS | 🔄 计划中 |
 
+## 更新日志
+
+### v3.0.0 (2026-06-14)
+
+**Windows npm 化 + 跨平台适配**
+
+- 跨平台系统信息工具 `platform_info.py`（CPU/内存/磁盘/网络/子网检测）
+- 修复所有 Linux 系统调用为 Windows 兼容实现（`/proc/*`、`os.statvfs`、`hostname -I`）
+- 统一所有默认路径为跨平台（`~/.opsbrain` on Windows，`/var/lib/opsbrain` on Linux）
+- 局域网嗅探扫描范围扩展到 256 个 IP，支持 HTTP/HTTPS/SNMP 端口检测
+- 拓扑图设备间连线生成（星形拓扑：设备→网关）
+- 拓扑图设备图标按类型显示（路由器🌐、交换机🔀、防火墙🛡️、服务器🖥️、AP📶、未知❓）
+- 拓扑图背景色和连线颜色适配白天/夜间模式
+- API 管理支持 7 个厂商（OpenAI/DeepSeek/SiliconFlow/Anthropic/MiMo/Ollama/自定义）
+- 各模型上下文窗口和输出限制配置
+- 知识库下载模板功能
+- 去掉 Docker 相关字段，前端适配 npm 版本
+
 ## License
 
 BSL 1.1 → MIT (2029-05-27) © zhangxiangyue
