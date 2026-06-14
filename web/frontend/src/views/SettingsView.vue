@@ -775,7 +775,7 @@ function onProviderChange(provider) {
     apiForm.max_output = p.models[0].output
   }
   if (!p.need_key) apiForm.api_key = 'ollama-local'
-  if (!apiForm.name) apiForm.name = p.name
+  apiForm.name = p.name
   if (provider !== 'custom') apiForm.api_type = 'llm'
 }
 
