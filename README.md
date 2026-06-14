@@ -17,7 +17,7 @@
 git clone https://github.com/Kai-CHI248640/OpsBrain.git
 cd OpsBrain
 
-# 2. 创建 Python 虚拟环境
+# 2. 创建 Python 虚拟环境(可选)
 python -m venv venv
 .\venv\Scripts\activate
 
