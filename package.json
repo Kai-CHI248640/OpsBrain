@@ -1,20 +1,19 @@
 {
   "name": "opsbrain",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "private": true,
   "description": "OpsBrain — AI 网络运维平台",
   "scripts": {
     "dev": "concurrently -n frontend,backend -c cyan,green \"npm run dev:frontend\" \"npm run dev:backend\"",
     "dev:frontend": "cd web/frontend && npm run dev",
-    "dev:backend": "cd web/backend && ..\\..\\venv\\Scripts\\python.exe -m uvicorn app.__init__:app --host 0.0.0.0 --port 8000 --reload",
+    "dev:backend": "node scripts/run-backend.js --reload",
     "build": "cd web/frontend && npm run build",
     "start": "concurrently -n frontend,backend -c cyan,green \"npm run start:frontend\" \"npm run start:backend\"",
     "start:frontend": "cd web/frontend && npm run preview",
-    "start:backend": "cd web/backend && ..\\..\\venv\\Scripts\\python.exe -m uvicorn app.__init__:app --host 0.0.0.0 --port 8000",
+    "start:backend": "node scripts/run-backend.js",
     "install:all": "npm install && cd web/frontend && npm install",
-    "install:python": "venv\\Scripts\\pip.exe install -r web/backend/requirements.txt",
-    "setup": "npm run install:all && npm run install:python && echo. && echo [OK] Dependencies installed. Run 'npm run dev' to start.",
-    "setup:win": "npm run install:all && npm run install:python",
+    "install:python": "node scripts/install-python.js",
+    "setup": "npm run install:all && npm run install:python",
     "init": "node scripts/init.js"
   },
   "devDependencies": {

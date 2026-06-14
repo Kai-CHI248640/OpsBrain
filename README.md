@@ -42,17 +42,6 @@ npm run init
 npm run dev
 ```
 
-### Docker 部署（生产环境）
-
-```bash
-cd oobm-topology
-docker compose up -d
-
-# 访问
-# 前端: http://localhost
-# API:  http://localhost/opsbrain/api/v1/auth/setup-required
-```
-
 ## 项目结构
 
 ```
@@ -111,10 +100,23 @@ opsbrain/
 | 平台 | 状态 |
 |------|------|
 | Windows | ✅ 支持 |
-| Linux | 🔄 计划中 |
-| macOS | 🔄 计划中 |
+| Linux | ✅ 支持 |
+| macOS | ✅ 支持 |
 
 ## 更新日志
+
+### v3.0.1 (2026-06-14)
+
+**跨平台兼容 + 嗅探优化 + 初始化修复**
+
+- `package.json` 脚本改为跨平台兼容（Linux/Mac/Windows 通用）
+- 新增 `scripts/run-backend.js` 跨平台启动后端
+- 新增 `scripts/install-python.js` 跨平台安装 Python 依赖
+- 局域网嗅探使用并发 ping 检测，过滤 VPN/WSL 虚拟网卡
+- `npm run init` 自动停止后端 + 删除数据库，支持一键重置
+- 后端启动时自动初始化数据库表
+- 修复 `__init__.py` 缺失导致后端无法启动
+- 删除 Docker 部署相关内容
 
 ### v3.0.0 (2026-06-14)
 
