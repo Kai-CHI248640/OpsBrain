@@ -226,14 +226,14 @@ async function sendMessage() {
   abortCtrl.value = new AbortController()
   startLoading(); scrollChat()
   try {
-    const res = await api.post('/agent/chat', { message: msg }, { timeout: 120000, signal: abortCtrl.value.signal })
-    messages.value.push({ role: 'assistant', content: res.data.reply || '无响应' })
+    const data = await api.post('/agent/chat', { message: msg }, { timeout: 120000, signal: abortCtrl.value.signal })
+    messages.value.push({ role: 'assistant', content: data.reply || '无响应' })
     saveHistory()
   } catch (e) {
     if (e.name === 'CanceledError' || e.code === 'ERR_CANCELED') {
       messages.value.push({ role: 'assistant', content: '⏹ 已取消' })
     } else {
-      messages.value.push({ role: 'assistant', content: '❌ ' + (e.response?.data?.detail || e.message) })
+      messages.value.push({ role: 'assistant', content: '❌ ' + e.message })
     }
   } finally {
     loading.value = false; abortCtrl.value = null; stopLoading()
@@ -244,13 +244,13 @@ function cancelMessage() { if (abortCtrl.value) abortCtrl.value.abort() }
 function scrollChat() { nextTick(() => { if (chatRef.value) chatRef.value.scrollTop = chatRef.value.scrollHeight }) }
 
 async function refreshStats() {
-  try { Object.assign(stats, (await api.get('/dashboard/stats')).data); apiState.value.configured = stats.api_status?.configured ?? (stats.api_status?.total > 0) } catch {}
+  try { Object.assign(stats, await api.get('/dashboard/stats')); apiState.value.configured = stats.api_status?.configured ?? (stats.api_status?.total > 0) } catch {}
 }
 async function loadTopologies() {
-  try { topologies.value = (await api.get('/topology/')).data.topologies || [] } catch { topologies.value = [] }
+  try { topologies.value = await api.get('/topology/') || [] } catch { topologies.value = [] }
 }
 async function loadLocalInfo() {
-  try { Object.assign(localInfo, (await api.get('/dashboard/local-info')).data) } catch {}
+  try { Object.assign(localInfo, await api.get('/dashboard/local-info')) } catch {}
 }
 
 let slowPoll = null
@@ -259,8 +259,8 @@ onMounted(async () => {
   await refreshStats()
   try {
     const h = await api.get('/dashboard/api-health')
-    apiState.value.configured = h.data.total > 0
-    apiState.value.healthy = h.data.total > 0 ? h.data.unhealthy === 0 : null
+    apiState.value.configured = h.total > 0
+    apiState.value.healthy = h.total > 0 ? h.unhealthy === 0 : null
   } catch { apiState.value.healthy = false }
   finally { apiState.value.checking = false }
   loadTopologies(); loadLocalInfo()

@@ -33,9 +33,12 @@ api.interceptors.response.use(
   },
   (err) => {
     if (err.response?.status === 401) {
-      localStorage.removeItem('opsbrain-token')
-      localStorage.removeItem('opsbrain-user')
-      window.location.hash = '#/login'
+      const currentPath = window.location.hash || ''
+      if (!currentPath.includes('/login') && !currentPath.includes('/setup')) {
+        localStorage.removeItem('opsbrain-token')
+        localStorage.removeItem('opsbrain-user')
+        window.location.hash = '#/login'
+      }
     }
     const message = err.response?.data?.error || err.response?.data?.detail || err.message
     return Promise.reject(new Error(message))

@@ -67,18 +67,10 @@
       </div>
 
       <div class="sidebar-footer">
-        <el-dropdown trigger="click" @command="handleCommand" placement="right">
-          <div class="user-info">
-            <el-avatar :size="30" class="user-avatar">{{ (auth.user?.username || 'U').charAt(0).toUpperCase() }}</el-avatar>
-            <span v-if="!collapsed" class="user-name">{{ auth.user?.display_name || auth.user?.username || 'User' }}</span>
-          </div>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item command="profile"><el-icon><User /></el-icon> 个人信息</el-dropdown-item>
-              <el-dropdown-item divided command="logout"><el-icon><SwitchButton /></el-icon> 退出登录</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+        <el-button text class="logout-btn" @click="handleLogout">
+          <el-icon><SwitchButton /></el-icon>
+          <span v-if="!collapsed">退出</span>
+        </el-button>
       </div>
     </aside>
 
@@ -106,7 +98,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Fold, Expand, Monitor, Connection, Setting, User, SwitchButton, Sunny, Moon, Operation, Collection } from '@element-plus/icons-vue'
+import { Fold, Expand, Monitor, Connection, Setting, SwitchButton, Sunny, Moon, Operation, Collection } from '@element-plus/icons-vue'
 import { useAuthStore, api } from '@/stores/auth'
 
 const route = useRoute(); const router = useRouter(); const auth = useAuthStore()
@@ -119,10 +111,10 @@ const stats = reactive({ topology_count: null, faulty_devices: null, api_status:
 const apiHealthy = ref(null); const apiConfigured = ref(false)
 let pollTimer = null
 
-async function fetchStats() { try { Object.assign(stats, (await api.get('/dashboard/stats')).data) } catch {} }
+async function fetchStats() { try { Object.assign(stats, await api.get('/dashboard/stats')) } catch {} }
 async function checkApiHealth() {
   try {
-    const d = (await api.get('/dashboard/api-health')).data
+    const d = await api.get('/dashboard/api-health')
     apiConfigured.value = d.total > 0
     apiHealthy.value = d.total > 0 ? d.unhealthy === 0 : null
   } catch {
@@ -137,7 +129,7 @@ function goTopologyList() { router.push('/topology'); if (isMobile.value) mobile
 onMounted(() => { refreshAll(); pollTimer = setInterval(refreshAll, 30000); window.addEventListener('resize', checkMobile) })
 onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); window.removeEventListener('resize', checkMobile) })
 function toggleTheme() { isDark.value = !isDark.value; document.documentElement.setAttribute('data-theme', isDark.value ? 'dark' : 'light'); localStorage.setItem('opsbrain-theme', isDark.value ? 'dark' : 'light') }
-function handleCommand(cmd) { if (cmd === 'logout') { auth.logout(); ElMessage.success('已退出'); router.push('/login') } }
+function handleLogout() { auth.logout(); ElMessage.success('已退出'); router.push('/login') }
 </script>
 
 <style scoped>
@@ -198,13 +190,8 @@ function handleCommand(cmd) { if (cmd === 'logout') { auth.logout(); ElMessage.s
 .status-tag { font-size: 10px; padding: 0 6px; line-height: 18px; height: 18px; }
 
 .sidebar-footer { padding: 12px; border-top: 1px solid var(--border-color); flex-shrink: 0; }
-.user-info {
-  display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 6px 8px;
-  border-radius: var(--radius-sm); transition: background .2s;
-}
-.user-info:hover { background: var(--primary-light); }
-.user-avatar { background: linear-gradient(135deg, var(--primary-color), #8b5cf6); color: #fff; font-weight: 700; font-size: 13px; }
-.user-name { font-size: 13px; color: var(--text-color); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.logout-btn { color: var(--text-secondary); font-size: 13px; width: 100%; justify-content: flex-start; }
+.logout-btn:hover { color: var(--danger-color); background: var(--danger-light); }
 
 .main-area { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 

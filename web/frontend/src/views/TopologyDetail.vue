@@ -149,14 +149,14 @@ async function saveDevices() {
 
 onMounted(async () => {
   try {
-    const res = await api.get(`/topology/${route.params.id}`)
-    topology.value = res.data
-    nodeList.value = (res.data.device_data || []).map(d => ({
+    const data = await api.get(`/topology/${route.params.id}`)
+    topology.value = data
+    nodeList.value = (data.device_data || []).map(d => ({
       ...d,
       status: d.status || 'unknown',
       portCount: d.type === 'router' ? 4 : d.type === 'switch' ? 24 : 2,
     }))
-    linkList.value = res.data.link_data || []
+    linkList.value = data.link_data || []
     // 数据加载后自动适配
     setTimeout(() => topoGraph.value?.fitView(), 500)
   } catch (e) {

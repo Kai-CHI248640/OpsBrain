@@ -71,10 +71,13 @@ async function handleLogin() {
     ElMessage.success('登录成功')
     router.push('/dashboard')
   } catch (e) {
-    const detail = e.response?.data?.detail
-    if (e.response?.status === 401) error.value = detail || '用户名或密码错误'
-    else if (e.code === 'ERR_NETWORK') error.value = '无法连接到服务器，请确认后端已启动'
-    else error.value = detail || `登录失败 (${e.response?.status || '网络错误'})`
+    if (e.message?.includes('Invalid username or password')) {
+      error.value = '用户名或密码错误'
+    } else if (e.message?.includes('ERR_NETWORK') || e.message?.includes('Network Error')) {
+      error.value = '无法连接到服务器，请确认后端已启动'
+    } else {
+      error.value = e.message || '登录失败'
+    }
   } finally {
     loading.value = false
   }

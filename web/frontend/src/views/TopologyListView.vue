@@ -80,8 +80,8 @@ const loading = ref(true)
 
 onMounted(async () => {
   try {
-    const res = await api.get('/topology/')
-    topologies.value = res.data.topologies || []
+    const data = await api.get('/topology/')
+    topologies.value = data || []
   } catch (e) {
     console.error('Failed to load topologies:', e)
   } finally {

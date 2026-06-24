@@ -445,8 +445,7 @@ function startDiscovery() {
 
   // 本机模式：从后端获取真实的主机信息
   if (selectedMethod.value === 'local') {
-    api.get('/dashboard/local-info').then(res => {
-      const d = res.data
+    api.get('/dashboard/local-info').then(d => {
       localSystem.value = d  // 保存供后续步骤使用
       devices.value = [{
         name: `OpsBrain-Local (${d.hostname})`,
@@ -487,9 +486,7 @@ function startDiscovery() {
   if (selectedMethod.value === 'lan') {
     api.post('/topology/discover', {
       method: 'lan', username: 'admin', password: '',
-    }, { timeout: 120000 }).then(res => {
-      const data = res.data || {}
-      if (!data.ok) { ElMessage.error(data.error || '嗅探失败'); discovering.value = false; return }
+    }, { timeout: 120000 }).then(data => {
       if (data.runtime) Object.assign(networkRuntime, data.runtime)
       if (data.runtime?.warning) ElMessage.warning(data.runtime.warning)
       devices.value = (data.devices || []).map(d => ({
@@ -501,7 +498,7 @@ function startDiscovery() {
       step.value = 1
       ElMessage.success(`发现 ${data.device_count || devices.value.length} 台设备`)
     }).catch(e => {
-      ElMessage.error('嗅探失败: ' + (e.response?.data?.error || e.message || '网络超时'))
+      ElMessage.error('嗅探失败: ' + (e.message || '网络超时'))
       discovering.value = false
     })
     return
@@ -565,16 +562,7 @@ function startCollection() {
       })),
       max_devices: 50,
       max_depth: 5,
-    }).then(res => {
-      const data = res.data
-      if (!data.ok) {
-        collectProgress.logs[0] = { device: '种子发现引擎', status: 'failed', info: data.error || '失败' }
-        collectProgress.status = 'exception'
-        collectProgress.percent = 100
-        collecting.value = false
-        ElMessage.error(data.error || '种子发现失败')
-        return
-      }
+    }).then(data => {
       collectProgress.logs[0] = { device: '种子发现引擎', status: 'success', info: `发现 ${data.device_count} 台设备` }
       collectProgress.percent = 100
       collectProgress.status = 'success'
@@ -869,8 +857,8 @@ import { onMounted } from 'vue'
 onMounted(() => {
   // Reset to step 0 on mount
   resetWizard()
-  api.get('/dashboard/network-runtime').then(res => {
-    Object.assign(networkRuntime, res.data)
+  api.get('/dashboard/network-runtime').then(data => {
+    Object.assign(networkRuntime, data)
   }).catch(() => {})
 })
 </script>

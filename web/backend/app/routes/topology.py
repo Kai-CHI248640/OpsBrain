@@ -256,29 +256,17 @@ async def run_discovery(data: dict):
         timestamp = datetime.now().strftime("%Y%m%d-%H%M")
         name = data.get("name", "") or f"{method}-发现-{timestamp}"
 
-        async with async_session() as session:
-            service = TopologyService(session)
-            topo_data = {
-                "name": name,
-                "discovery_method": method,
-                "device_count": len(devices),
-                "link_count": len(links),
-                "device_data": devices,
-                "link_data": links,
-                "analysis": analysis,
-                "mermaid_code": "",
-            }
-            result = await service.create_topology(topo_data)
-
         return ApiResponse.success({
-            "topo_id": result["id"][:8],
             "name": name,
             "device_count": len(devices),
             "link_count": len(links),
             "runtime": runtime,
             "analysis": analysis,
             "devices": [{"name": d.get("name","?"), "type": d.get("type","?"),
-                         "ip": d.get("ip","?"), "vendor": d.get("vendor","?")} for d in devices[:10]],
+                         "ip": d.get("ip","?"), "vendor": d.get("vendor","?"),
+                         "loginMethod": d.get("loginMethod", "")} for d in devices],
+            "device_data": devices,
+            "link_data": links,
         }, "发现成功")
     except ImportError as ie:
         return ApiResponse.error(f"缺少依赖模块: {ie}。请确认容器已安装所需 Python 包。")
