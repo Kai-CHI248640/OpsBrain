@@ -487,8 +487,8 @@ function startDiscovery() {
   if (selectedMethod.value === 'lan') {
     api.post('/topology/discover', {
       method: 'lan', username: 'admin', password: '',
-    }, { timeout: 180000 }).then(res => {
-      const data = res.data
+    }, { timeout: 120000 }).then(res => {
+      const data = res.data || {}
       if (!data.ok) { ElMessage.error(data.error || '嗅探失败'); discovering.value = false; return }
       if (data.runtime) Object.assign(networkRuntime, data.runtime)
       if (data.runtime?.warning) ElMessage.warning(data.runtime.warning)
@@ -499,9 +499,9 @@ function startDiscovery() {
       }))
       discovering.value = false
       step.value = 1
-      ElMessage.success(`发现 ${data.device_count} 台设备`)
+      ElMessage.success(`发现 ${data.device_count || devices.value.length} 台设备`)
     }).catch(e => {
-      ElMessage.error('嗅探失败: ' + (e.response?.data?.error || e.message))
+      ElMessage.error('嗅探失败: ' + (e.response?.data?.error || e.message || '网络超时'))
       discovering.value = false
     })
     return

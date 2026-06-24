@@ -27,45 +27,15 @@ from sqlalchemy import select
 from ..auth import get_current_user
 from ..database import async_session
 from ..models import User, ApiKey, Subagent, TopologySave, FeishuConfig
+from ..services.llm_service import llm_with_tools, llm_raw
+from ..services.tool_executor import execute_tool_call, socket_check, ssh_exec, telnet_exec, execute_on_devices, get_verify_command, run_e2e_test
+from ..services.memory import load_memory, save_memory, delete_memory
 
 from logging_setup import get_logger
 log = get_logger(__name__)
 agent_router = APIRouter()
 
-_PROVIDER_URLS = {
-    "openai": "https://api.openai.com/v1/chat/completions",
-    "deepseek": "https://api.deepseek.com/v1/chat/completions",
-    "siliconflow": "https://api.siliconflow.cn/v1/chat/completions",
-}
-_REASONING_PLACEHOLDER = "(reasoning omitted)"
-
 def _now(): return datetime.utcnow()
-
-# ═══ DeepSeek V4 兼容层 ═══════════════════════════════════════════
-
-def _requires_reasoning(model: str) -> bool:
-    lower = model.lower()
-    return ("deepseek-v4" in lower or lower.startswith("deepseek-chat")
-            or lower.startswith("deepseek-reasoner") or "reasoner" in lower
-            or "-reasoning" in lower or "-thinking" in lower)
-
-def _sanitize(msgs: list[dict], model: str) -> int:
-    if not _requires_reasoning(model): return 0
-    fixed = 0
-    for m in msgs:
-        if m.get("role") == "assistant" and "reasoning_content" not in m:
-            m["reasoning_content"] = _REASONING_PLACEHOLDER; fixed += 1
-    return fixed
-
-async def _fetch_ak(api_key_obj=None):
-    if api_key_obj: return api_key_obj
-    async with async_session() as s:
-        r = await s.execute(select(ApiKey).where(ApiKey.is_active == True, ApiKey.api_type == "llm").order_by(ApiKey.is_default.desc()))
-        return r.scalar_one_or_none()
-
-def _build_url(ak):
-    base = (ak.api_base or "").strip()
-    return base.rstrip("/") + "/chat/completions" if base else _PROVIDER_URLS.get(ak.provider.strip(), "")
 
 # ═══ Function Calling 工具定义 ═══════════════════════════════════
 
@@ -165,462 +135,19 @@ SUBAGENT_TOOLS = [
 ]
 
 
-# ═══ Function Calling 执行引擎 ═══════════════════════════════════
-
-async def _execute_tool_call(name: str, args: dict, context: dict) -> str:
-    """执行单个工具调用，返回 JSON 字符串结果"""
-    try:
-        if name == "list_topologies":
-            async with async_session() as s:
-                topos = (await s.execute(select(TopologySave).order_by(TopologySave.updated_at.desc()))).scalars().all()
-            return json.dumps([{"id": t.id[:8], "name": t.name, "device_count": t.device_count, "link_count": t.link_count} for t in topos], ensure_ascii=False)
-
-        elif name == "list_subagents":
-            async with async_session() as s:
-                subs = (await s.execute(select(Subagent))).scalars().all()
-                topos = (await s.execute(select(TopologySave))).scalars().all()
-                tmap = {t.id: t.name for t in topos}
-            return json.dumps([{"id": s.id, "name": s.name, "status": s.status, "topology": tmap.get(s.topology_id, "?")} for s in subs], ensure_ascii=False)
-
-        elif name == "get_topology_detail":
-            async with async_session() as s:
-                topo = (await s.execute(select(TopologySave).where(TopologySave.id.like(f"{args['topo_id']}%")))).scalar_one_or_none()
-            if not topo: return json.dumps({"error": "拓扑未找到"})
-            devices = json.loads(topo.device_data) if isinstance(topo.device_data, str) else (topo.device_data or [])
-            return json.dumps({"name": topo.name, "device_count": topo.device_count, "link_count": topo.link_count, "devices": [{"name": d.get("name"), "type": d.get("type"), "ip": d.get("ip")} for d in devices]}, ensure_ascii=False)
-
-        elif name == "get_dashboard_stats":
-            from .dashboard import get_stats_data
-            return json.dumps(await get_stats_data(), ensure_ascii=False)
-
-        elif name == "start_discovery":
-            method = args.get("method", "lan")
-            try:
-                async with httpx.AsyncClient(timeout=120) as client:
-                    if method == "seed":
-                        # 种子发现：调用 seed API
-                        seeds = args.get("seeds", [])
-                        if not seeds:
-                            return json.dumps({"ok": False, "error": "种子发现需要至少一台种子设备的IP和凭据"})
-                        resp = await client.post(
-                            "http://127.0.0.1:8000/api/v1/topology/discover-seed",
-                            json={
-                                "seeds": seeds,
-                                "max_devices": 50,
-                                "max_depth": 5,
-                            },
-                        )
-                    elif method == "serial":
-                        # 串口服务器
-                        console_ip = args.get("console_ip", "")
-                        if not console_ip:
-                            return json.dumps({"ok": False, "error": "串口服务器模式需要提供 console_ip"})
-                        # 先自动发现端口
-                        ports_resp = await client.post(
-                            "http://127.0.0.1:8000/api/v1/topology/console-discover",
-                            json={"ip": console_ip, "start": 2001, "end": 2048},
-                        )
-                        return json.dumps(ports_resp.json(), ensure_ascii=False)
-                    elif method == "import":
-                        return json.dumps({
-                            "ok": False,
-                            "error": "Excel导入请通过Web界面的知识库导入按钮上传文件",
-                            "hint": "打开 Knowledge Base 页面，点击右上角 导入 按钮上传 CSV/XLSX",
-                        })
-                    else:
-                        # 默认：LAN嗅探（自动扫描，无需用户指定网段）
-                        resp = await client.post(
-                            "http://127.0.0.1:8000/api/v1/topology/discover",
-                            json={
-                                "method": "lan",
-                                "username": args.get("username", "admin"),
-                                "password": args.get("password", ""),
-                            },
-                        )
-                    result = resp.json()
-                    return json.dumps(result, ensure_ascii=False)
-            except Exception as e:
-                return json.dumps({"ok": False, "error": f"嗅探失败: {str(e)}"})
-
-        elif name == "command_subagent":
-            result = await _internal_dispatch(args["subagent_id"], args["task"])
-            return json.dumps({"dispatched": True, "result": result[:300]}, ensure_ascii=False)
-
-        elif name == "get_device_info":
-            topo_id = context.get("topo_id", "")
-            async with async_session() as s:
-                topo = (await s.execute(select(TopologySave).where(TopologySave.id == topo_id))).scalar_one_or_none()
-            if not topo: return json.dumps({"error": "拓扑未找到"})
-            devices = json.loads(topo.device_data) if isinstance(topo.device_data, str) else (topo.device_data or [])
-            for d in devices:
-                if d.get("name", "").lower() == args["device_name"].lower():
-                    return json.dumps({"found": True, "name": d.get("name"), "type": d.get("type"), "ip": d.get("ip"), "vendor": d.get("vendor"), "login_method": d.get("loginMethod"), "has_password": bool(d.get("password")), "status": d.get("status", "unknown")}, ensure_ascii=False)
-            return json.dumps({"found": False, "error": f"设备 {args['device_name']} 未找到"})
-
-        elif name == "check_topology_devices":
-            topo_id = context.get("topo_id", "")
-            result = await _execute_on_devices(topo_id)
-            return json.dumps({"result": result}, ensure_ascii=False)
-
-        elif name == "ssh_execute":
-            out = await _ssh_exec(args["host"], args.get("username", ""), args.get("password", ""), args["command"], args.get("port", 22))
-            return json.dumps(out, ensure_ascii=False)
-
-        elif name == "ping_device":
-            alive = await _socket_check(args["host"], 22)
-            return json.dumps({"host": args["host"], "reachable": alive}, ensure_ascii=False)
-
-        elif name == "verify_config":
-            verify_cmd = _get_verify_command(args.get("config_type", ""), args.get("vendor", "*"))
-            if not verify_cmd:
-                verify_cmd = "show version"
-            out = await _ssh_exec(args["host"], args["username"], args["password"], verify_cmd)
-            return json.dumps({"verified": out.get("exit_code", -1) == 0, "command": verify_cmd, "output": out.get("stdout", "")[:300]}, ensure_ascii=False)
-
-        elif name == "e2e_test":
-            async with async_session() as s:
-                topo = (await s.execute(select(TopologySave).where(TopologySave.id == args["topo_id"]))).scalar_one_or_none()
-            if not topo:
-                return json.dumps({"error": "拓扑未找到"})
-            devices = json.loads(topo.device_data) if isinstance(topo.device_data, str) else (topo.device_data or [])
-            links = json.loads(topo.link_data) if isinstance(topo.link_data, str) else (topo.link_data or [])
-            report = await _run_e2e_test(devices, links)
-            return json.dumps({"report": report}, ensure_ascii=False)
-
-        else:
-            return json.dumps({"error": f"未知工具: {name}"})
-    except Exception as e:
-        return json.dumps({"error": f"工具执行异常: {str(e)}"})
-
-
-# ═══ LLM 调用（带 Function Calling）═══════════════════════════
-
-async def _llm_with_tools(messages: list[dict], tools: list[dict] | None = None,
-                          api_key_obj=None, context: dict | None = None,
-                          max_rounds: int = 5) -> str:
-    """
-    带 Function Calling 的 LLM 调用（参照 deepseek-tui tool_calls 循环模式）
-
-    流程:
-      send [system, user, tools] → LLM returns tool_calls?
-        YES → execute tool → append result → send again (up to max_rounds)
-        NO  → return text
-    """
-    ak = await _fetch_ak(api_key_obj)
-    if not ak: return "请先在设置中配置 API Key"
-    url = _build_url(ak)
-    if not url: return f"不支持的提供商: {ak.provider}"
-    model = (ak.model or "deepseek-chat").strip()
-    ctx = context or {}
-
-    for round_num in range(max_rounds):
-        _sanitize(messages, model)
-        body = {"model": model, "messages": messages, "temperature": 0.7, "max_tokens": 4000}
-        if tools:
-            body["tools"] = tools
-
-        try:
-            async with httpx.AsyncClient(timeout=120) as c:
-                resp = await c.post(url, headers={
-                    "Authorization": f"Bearer {ak.api_key.strip()}",
-                    "Content-Type": "application/json",
-                }, json=body)
-
-                if resp.status_code >= 400:
-                    try: err = resp.json().get("error", {}).get("message", resp.text[:300])
-                    except: err = resp.text[:300]
-                    return f"API 错误 ({resp.status_code}): {err}"
-
-                data = resp.json()
-                msg = data["choices"][0]["message"]
-
-                # 没有 tool_calls → 返回文本
-                if not msg.get("tool_calls"):
-                    return msg.get("content", "")
-
-                # 有 tool_calls → 执行工具
-                # 保留完整消息（含 reasoning_content）供 DeepSeek 使用
-                asst = {"role": "assistant", "content": msg.get("content") or "", "tool_calls": msg["tool_calls"]}
-                if "reasoning_content" in msg:
-                    asst["reasoning_content"] = msg["reasoning_content"]
-                messages.append(asst)
-
-                for tc in msg["tool_calls"]:
-                    fn = tc.get("function", {})
-                    name = fn.get("name", "")
-                    try: args = json.loads(fn.get("arguments", "{}"))
-                    except: args = {}
-                    result = await _execute_tool_call(name, args, ctx)
-                    messages.append({"role": "tool", "tool_call_id": tc["id"], "content": result})
-
-        except httpx.TimeoutException:
-            return "API 超时"
-        except Exception as e:
-            return f"API 异常: {str(e)}"
-
-    return "已达到最大工具调用轮数。"
-
-
-# ═══ 原始 LLM 调用 ═══════════════════════════════════════════
-
-async def _llm_raw(messages: list[dict], api_key_obj=None) -> str:
-    """原始 LLM 调用，不添加包装信息"""
-    ak = await _fetch_ak(api_key_obj)
-    if not ak: return "请先在设置中配置 API Key"
-    url = _build_url(ak)
-    if not url: return f"不支持的提供商: {ak.provider}"
-    model = (ak.model or "deepseek-chat").strip()
-    _sanitize(messages, model)
-
-    body = {"model": model, "messages": messages, "temperature": 0.7, "max_tokens": 4000}
-    try:
-        async with httpx.AsyncClient(timeout=120) as c:
-            resp = await c.post(url, headers={
-                "Authorization": f"Bearer {ak.api_key.strip()}",
-                "Content-Type": "application/json",
-            }, json=body)
-            if resp.status_code >= 400:
-                try: err = resp.json().get("error", {}).get("message", resp.text[:300])
-                except: err = resp.text[:300]
-                if "reasoning_content" in err:
-                    for m in reversed(messages):
-                        if m.get("role") == "assistant":
-                            m["reasoning_content"] = _REASONING_PLACEHOLDER; break
-                    resp2 = await c.post(url, headers=resp.request.headers, json=body)
-                    if resp2.status_code < 400:
-                        return resp2.json()["choices"][0]["message"].get("content", "")
-                return f"[LLM error {resp.status_code}]: {err}"
-            return resp.json()["choices"][0]["message"].get("content", "")
-    except Exception as e:
-        return f"[LLM exception]: {str(e)}"
-
-
-# ═══ 设备执行引擎（SSH/Telnet/Ping）════════════════════════════════
-
-async def _execute_on_devices(topo_id: str) -> str:
-    """对拓扑中的设备执行真实操作，返回执行结果"""
-    async with async_session() as s:
-        topo = (await s.execute(select(TopologySave).where(TopologySave.id == topo_id))).scalar_one_or_none()
-    if not topo:
-        return "❌ 拓扑未找到"
-
-    devices = json.loads(topo.device_data) if isinstance(topo.device_data, str) else (topo.device_data or [])
-    if not devices:
-        return "❌ 拓扑中无设备"
-
-    results = []
-    for dev in devices:
-        name = dev.get('name', '?')
-        ip = dev.get('ip', '')
-        pwd = dev.get('password', '')
-        user = dev.get('username', 'admin')
-        login = dev.get('loginMethod', 'ssh')
-        dtype = dev.get('type', '?')
-
-        if not ip:
-            results.append(f"  ⚠️ {name}: 无 IP，跳过")
-            continue
-
-        # 1. 连通性检测
-        alive = await _socket_check(ip, 22 if login == 'ssh' else 23)
-        if not alive:
-            results.append(f"  ❌ {name} ({ip}): 不可达（端口不通）")
-            continue
-
-        # 2. SSH/Telnet 执行
-        if not pwd:
-            results.append(f"  ⚠️ {name} ({ip}): 可达但缺密码，无法登录")
-            continue
-
-        if login == 'ssh':
-            out = await _ssh_exec(ip, user, pwd, "show version | include uptime" if dtype in ('router','switch') else "uname -a")
-            if out.get('exit_code', -1) == 0:
-                ver = (out.get('output', '')[:80]).replace('\n', ' ')
-                results.append(f"  ✅ {name} ({ip}): 已连接，{ver}")
-            else:
-                results.append(f"  ❌ {name} ({ip}): SSH 失败 - {out.get('error', '?')[:60]}")
-        elif login == 'telnet':
-            out = await _telnet_exec(ip, dev.get('port', 23), user, pwd, "show version" if dtype in ('router','switch') else "whoami")
-            if out.get('exit_code', -1) == 0:
-                results.append(f"  ✅ {name} ({ip}): Telnet 已连接")
-            else:
-                results.append(f"  ❌ {name} ({ip}): Telnet 失败 - {out.get('error', '?')[:60]}")
-        else:
-            results.append(f"  ⚠️ {name} ({ip}): 不支持的连接方式 {login}")
-
-    return "\n".join(results) if results else "无设备可执行"
-
-
-async def _socket_check(host: str, port: int, timeout: int = 3) -> bool:
-    """Socket 端口连通性检测"""
-    try:
-        _, writer = await asyncio.wait_for(
-            asyncio.open_connection(host, port), timeout=timeout
-        )
-        writer.close()
-        await writer.wait_closed()
-        return True
-    except:
-        return False
-
-
-async def _ssh_exec(host: str, user: str, pwd: str, cmd: str, port: int = 22, timeout: int = 10) -> dict:
-    """paramiko SSH 执行命令"""
-    try:
-        loop = asyncio.get_running_loop()
-        def _do():
-            import paramiko
-            c = paramiko.SSHClient()
-            c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            c.connect(host, port=port, username=user, password=pwd,
-                      timeout=timeout, allow_agent=False, look_for_keys=False)
-            stdin, stdout, stderr = c.exec_command(cmd, timeout=timeout)
-            out = stdout.read().decode(errors='replace')
-            err = stderr.read().decode(errors='replace')
-            code = stdout.channel.recv_exit_status()
-            c.close()
-            return {'output': out, 'error': err, 'exit_code': code}
-        return await loop.run_in_executor(None, _do)
-    except Exception as e:
-        return {'output': '', 'error': str(e), 'exit_code': -1}
-
-
-async def _telnet_exec(host: str, port: int, user: str, pwd: str, cmd: str, timeout: int = 10) -> dict:
-    """telnetlib3 Telnet 执行命令"""
-    try:
-        import telnetlib3
-        reader, writer = await asyncio.wait_for(
-            telnetlib3.open_connection(host, port), timeout=timeout
-        )
-        output = []
-
-        # 等登录提示
-        try:
-            data = await asyncio.wait_for(reader.readuntil(b'ogin:'), timeout=8)
-            output.append(data.decode(errors='replace'))
-            writer.write(user + '\n')
-            data = await asyncio.wait_for(reader.readuntil(b'assword:'), timeout=8)
-            output.append(data.decode(errors='replace'))
-            writer.write(pwd + '\n')
-            await asyncio.sleep(1)
-        except asyncio.TimeoutError:
-            pass
-
-        writer.write(cmd + '\n')
-        await asyncio.sleep(2)
-        try:
-            rest = await asyncio.wait_for(reader.read(4096), timeout=timeout)
-            output.append(rest.decode(errors='replace'))
-        except asyncio.TimeoutError:
-            pass
-
-        writer.close()
-        return {'output': ''.join(output), 'error': '', 'exit_code': 0}
-    except Exception as e:
-        return {'output': '', 'error': str(e), 'exit_code': -1}
-
-
-# ═══ Agent 记忆系统（参照 OpenClaw memory/*.md 模式）═════════
-
-import os as _os
-
-def _get_memory_dir() -> str:
-    from platform_info import get_data_dir
-    return str(get_data_dir() / "memory")
-
-_MEMORY_DIR = _get_memory_dir()
-_MAX_CONTEXT = 20  # 最多保留 20 条消息上下文
-
-
-def _memory_path(name: str) -> str:
-    """记忆文件路径，类似 OpenClaw 的 memory/agent-name.json"""
-    _os.makedirs(_MEMORY_DIR, exist_ok=True)
-    return _os.path.join(_MEMORY_DIR, f"{name}.json")
-
-
-def _load_memory(name: str) -> list[dict]:
-    """加载 Agent 记忆（最近 N 条）"""
-    path = _memory_path(name)
-    if not _os.path.exists(path):
-        return []
-    try:
-        with open(path, "r") as f:
-            data = json.load(f)
-        return data[-_MAX_CONTEXT:] if len(data) > _MAX_CONTEXT else data
-    except:
-        return []
-
-
-def _save_memory(name: str, messages: list[dict]):
-    """保存 Agent 记忆，只保留最近的上下文"""
-    path = _memory_path(name)
-    # 读取已有历史，合并新消息
-    existing = []
-    if _os.path.exists(path):
-        try:
-            with open(path, "r") as f:
-                existing = json.load(f)
-        except:
-            pass
-    # 只保留 user/assistant 角色消息
-    new_msgs = [m for m in messages if m.get("role") in ("user", "assistant")]
-    combined = existing + new_msgs
-    # 截断保留最后 N 条
-    if len(combined) > _MAX_CONTEXT:
-        combined = combined[-_MAX_CONTEXT:]
-    try:
-        with open(path, "w") as f:
-            json.dump(combined, f, ensure_ascii=False, indent=2)
-        return len(combined)
-    except:
-        return 0
-
-
-# ═══ 配置验证 + E2E 测试 ══════════════════════════════════════
-
-VERIFY_COMMANDS = {
-    "端口": "show interface status | include connected",
-    "VLAN": "show vlan brief",
-    "路由": "show ip route | include ^[OSB]",
-    "生成树": "show spanning-tree | include Root|Desg",
-    "ACL": "show access-lists | include permit|deny",
-    "OSPF": "show ip ospf neighbor",
-    "链路聚合": "show etherchannel summary",
-    "DHCP": "show ip dhcp binding",
-    "端口安全": "show port-security",
-    "状态": "show version",
-}
-
-def _get_verify_command(task: str, vendor: str = "*") -> str | None:
-    """根据配置任务返回验证命令"""
-    task_lower = task.lower()
-    for keyword, cmd in VERIFY_COMMANDS.items():
-        if keyword in task_lower or keyword in task:
-            return cmd
-    return None
-
-
-async def _run_e2e_test(devices: list, links: list) -> str:
-    """端到端测试：检查设备间连通性和协议状态"""
-    results = []
-    checked_ips = set()
-    
-    # 1. 连通性测试（ping 核心设备）
-    for dev in devices[:5]:
-        ip = dev.get("ip", "")
-        if ip and ip not in checked_ips:
-            checked_ips.add(ip)
-            alive = await _socket_check(ip, 22)
-            results.append(f"{dev.get('name','?')} ({ip}): {'✅ 可达' if alive else '❌ 不可达'}")
-    
-    # 2. 链路测试（检查拓扑中的链路两端是否互通）
-    for link in links[:5]:
-        a = link.get("source", "")
-        b = link.get("target", "")
-        if a and b:
-            results.append(f"链路 {a}↔{b}: 需SSH验证")
-    
-    return "E2E 测试报告:\n" + "\n".join(results) if results else "无可测设备"
+# ═══ LLM 调用（带 Function Calling）═══════════════════════════════
+
+async def _llm_with_tools(messages, tools=None, api_key_obj=None, context=None, max_rounds=5):
+    """Wrapper for llm_service.llm_with_tools with tool_executor injected."""
+    return await llm_with_tools(
+        messages, tools=tools, api_key_obj=api_key_obj,
+        context=context, max_rounds=max_rounds,
+        tool_executor=execute_tool_call,
+    )
+
+async def _llm_raw(messages, api_key_obj=None):
+    """Wrapper for llm_service.llm_raw."""
+    return await llm_raw(messages, api_key_obj=api_key_obj)
 
 
 # ═══ Hermes Agent 循环（Subagent 自主执行 + 优化）═══════════
@@ -692,7 +219,7 @@ async def _hermes_subagent_loop(topo_id: str, task: str, plan: str = "") -> str:
             continue
 
         # 连通性
-        alive = await _socket_check(ip, 22 if login == "ssh" else 23)
+        alive = await socket_check(ip, 22 if login == "ssh" else 23)
         if not alive:
             executions.append(f"{name} ({ip}): ❌ 不可达")
             continue
@@ -711,7 +238,7 @@ async def _hermes_subagent_loop(topo_id: str, task: str, plan: str = "") -> str:
             if kb_cmds:
                 for cmd_entry in kb_cmds:
                     first_cmd = cmd_entry["commands"].split("\n")[0]
-                    result = await _ssh_exec(ip, user, pwd, first_cmd, port=dev.get("port", 22))
+                    result = await ssh_exec(ip, user, pwd, first_cmd, port=dev.get("port", 22))
                     exit_code = result.get("exit_code", -1)
                     if exit_code == 0:
                         break
@@ -719,12 +246,12 @@ async def _hermes_subagent_loop(topo_id: str, task: str, plan: str = "") -> str:
                 if exit_code != 0 and len(kb_cmds) > 1:
                     optimizations.append(f"{name}: 第一命令失败，优化切换为 {kb_cmds[1]['task']}")
                     alt_cmd = kb_cmds[1]["commands"].split("\n")[0]
-                    result = await _ssh_exec(ip, user, pwd, alt_cmd, port=dev.get("port", 22))
+                    result = await ssh_exec(ip, user, pwd, alt_cmd, port=dev.get("port", 22))
                     exit_code = result.get("exit_code", -1)
 
             if exit_code == -1:
                 # 最后回退：show version
-                result = await _ssh_exec(ip, user, pwd, "show version", port=dev.get("port", 22))
+                result = await ssh_exec(ip, user, pwd, "show version", port=dev.get("port", 22))
                 exit_code = result.get("exit_code", -1)
 
             if exit_code == 0:
@@ -733,7 +260,7 @@ async def _hermes_subagent_loop(topo_id: str, task: str, plan: str = "") -> str:
                 executions.append(f"{name} ({ip}): ❌ SSH 失败 - {result.get('error', '?')[:50]}")
         elif login == "telnet":
             cmd = "show version" if vendor in ("cisco", "huawei", "h3c", "juniper") else "whoami"
-            result = await _telnet_exec(ip, dev.get("port", 23), user, pwd, cmd)
+            result = await telnet_exec(ip, dev.get("port", 23), user, pwd, cmd)
             if result.get("exit_code", -1) == 0:
                 executions.append(f"{name} ({ip}): ✅ Telnet 连接成功")
             else:
@@ -895,7 +422,7 @@ async def _internal_dispatch(subagent_id: str, task: str) -> str:
     ])
 
     # Step 2: 实际执行设备操作（SSH/Telnet/Ping）
-    exec_results = await _execute_on_devices(sa.topology_id)
+    exec_results = await execute_on_devices(sa.topology_id)
 
     # Step 3: 让 Subagent LLM 基于实际执行结果做最终汇报
     final_reply = await _llm_raw([
@@ -922,7 +449,7 @@ async def _internal_dispatch(subagent_id: str, task: str) -> str:
         brief = full_report[:200]
 
     # 保存到 Subagent 记忆
-    _save_memory(f"subagent_{sa.topology_id}", [
+    save_memory(f"subagent_{sa.topology_id}", [
         {"role": "user", "content": f"【总控派发】{task}", "ts": _now().isoformat()},
         {"role": "assistant", "content": brief, "ts": _now().isoformat()},
     ])
@@ -975,7 +502,7 @@ async def commander_chat(data: dict, user: User = Depends(get_current_user)):
 
     # 重置命令
     if user_msg == "/reset":
-        _save_memory("commander", [])
+        save_memory("commander", [])
         # 删除记忆文件确保彻底清除
         import os as _os2
         mem_path = _memory_path("commander")
@@ -1006,7 +533,7 @@ async def commander_chat(data: dict, user: User = Depends(get_current_user)):
         final = plan_reply
 
     # 保存记忆
-    _save_memory("commander", [
+    save_memory("commander", [
         {"role": "user", "content": user_msg, "ts": _now().isoformat()},
         {"role": "assistant", "content": final, "ts": _now().isoformat()},
     ])
@@ -1029,7 +556,7 @@ async def subagent_chat(topo_id: str, data: dict, user: User = Depends(get_curre
 
     # 重置命令
     if msg == "/reset":
-        _save_memory(f"subagent_{topo_id}", [])
+        save_memory(f"subagent_{topo_id}", [])
         import os as _os2
         mem_path = _memory_path(f"subagent_{topo_id}")
         if _os2.path.exists(mem_path):
@@ -1056,7 +583,7 @@ async def subagent_chat(topo_id: str, data: dict, user: User = Depends(get_curre
     reply = await _llm_with_tools(messages, tools=SUBAGENT_TOOLS, api_key_obj=ak, context={"topo_id": topo_id})
 
     # 保存记忆
-    _save_memory(f"subagent_{topo_id}", [
+    save_memory(f"subagent_{topo_id}", [
         {"role": "user", "content": msg, "ts": _now().isoformat()},
         {"role": "assistant", "content": reply, "ts": _now().isoformat()},
     ])
@@ -1103,7 +630,7 @@ async def _feishu_message_handler(event: dict) -> str | None:
             + [{"role": "user", "content": f"[飞书] {user_msg}"}],
             tools=COMMANDER_TOOLS,
         )
-        _save_memory("commander", [
+        save_memory("commander", [
             {"role": "user", "content": f"[飞书] {user_msg}", "ts": _now().isoformat()},
             {"role": "assistant", "content": reply, "ts": _now().isoformat()},
         ])

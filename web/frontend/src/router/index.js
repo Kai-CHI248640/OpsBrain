@@ -1,9 +1,5 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 
-/**
- * 使用 hash 路由 (#/login, #/settings 等)
- * 避免 SPA 刷新时服务器返回 404
- */
 const routes = [
   {
     path: '/setup',
@@ -32,7 +28,7 @@ const routes = [
       {
         path: 'settings',
         name: 'Settings',
-        meta: { title: '设置' },
+        meta: { title: '设置', requiresRole: 'admin' },
         component: () => import('@/views/SettingsView.vue'),
       },
       {
@@ -54,6 +50,12 @@ const routes = [
         component: () => import('@/views/TopologyDetail.vue'),
       },
       {
+        path: 'topology/tasks',
+        name: 'TopologyTasks',
+        meta: { title: '定时任务' },
+        component: () => import('@/views/TaskList.vue'),
+      },
+      {
         path: 'knowledge',
         name: 'KnowledgeBase',
         meta: { title: '知识库' },
@@ -72,6 +74,45 @@ const routes = [
 const router = createRouter({
   history: createWebHashHistory(),
   routes,
+})
+
+router.beforeEach(async (to, from, next) => {
+  document.title = to.meta.title ? `${to.meta.title} - OpsBrain` : 'OpsBrain'
+
+  const requiresAuth = to.meta.requiresAuth
+  const isGuest = to.meta.guest
+
+  const token = localStorage.getItem('opsbrain-token')
+  const savedUser = localStorage.getItem('opsbrain-user')
+
+  if (isGuest) {
+    if (token && savedUser) {
+      next('/dashboard')
+      return
+    }
+    next()
+    return
+  }
+
+  if (requiresAuth && !token) {
+    next('/login')
+    return
+  }
+
+  if (to.meta.requiresRole && savedUser) {
+    try {
+      const user = JSON.parse(savedUser)
+      if (user.role !== to.meta.requiresRole) {
+        next('/dashboard')
+        return
+      }
+    } catch {
+      next('/dashboard')
+      return
+    }
+  }
+
+  next()
 })
 
 export default router

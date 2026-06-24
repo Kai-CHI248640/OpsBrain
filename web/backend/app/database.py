@@ -35,7 +35,7 @@ async def init_db() -> None:
     """创建所有表，初始化默认数据"""
     DB_DIR.mkdir(parents=True, exist_ok=True)
 
-    from .models import User, Setting, ApiKey, ProjectConfig, AgentConfig, TopologySave, Subagent, FeishuConfig  # noqa
+    from .models import User, Setting, ApiKey, ProjectConfig, AgentConfig, TopologySave, Subagent, FeishuConfig, Workflow, WorkflowExecution, ScheduledTask, TaskExecutionLog  # noqa
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

@@ -105,31 +105,8 @@ async def arp_scan(subnet: str, timeout: float = 3.0) -> list[dict]:
 
 async def snmp_query(host: str, community: str = "public", timeout: float = 2.0) -> dict:
     """SNMP v2c 查询设备基本信息"""
-    result = {}
-    try:
-        from pysnmp.hlapi.v3.asyncio import get_cmd, CommunityData, UdpTransportTarget, ContextData, ObjectType, ObjectIdentity
-        
-        targets = {
-            "sysDescr": "1.3.6.1.2.1.1.1.0",
-            "sysName": "1.3.6.1.2.1.1.5.0",
-            "sysLocation": "1.3.6.1.2.1.1.6.0",
-        }
-        
-        for name, oid in targets.items():
-            error_indication, error_status, _, var_binds = await get_cmd(
-                CommunityData(community, mpModel=0),
-                UdpTransportTarget((host, 161), timeout=timeout),
-                ContextData(),
-                ObjectType(ObjectIdentity(oid))
-            )
-            if error_indication or error_status:
-                continue
-            for var_bind in var_binds:
-                result[name] = str(var_bind[1])
-                
-    except ImportError:
-        pass
-    return result
+    from .snmp_lldp import get_snmp_sysinfo
+    return await get_snmp_sysinfo(host, community)
 
 
 # ═══ 厂商识别 ═════════════════════════════════════════════════
@@ -157,20 +134,24 @@ class NetworkScanner:
     """
     主机网络嗅探引擎。
     优先 ARP 扫描，降级 TCP 探测，尝试 SNMP 识别。
+    支持 WeOps 风格的拓扑发现（CDP/LLDP SNMP 查询）。
     """
     
     def __init__(self, subnets: list[str] | None = None,
                  max_hosts: int = 256, snmp_community: str = "public",
-                 probes: list[int] | None = None):
+                 probes: list[int] | None = None,
+                 discovery_method: str = "standard"):  # "standard" or "topology"
         self.subnets = subnets or get_local_subnets()
         self.max_hosts = max_hosts
         self.snmp_community = snmp_community
         self.probes = probes or PROBE_PORTS
+        self.discovery_method = discovery_method
         self._devices: list[dict] = []
+        self._links: list[dict] = []
     
     async def scan(self) -> dict:
         """执行扫描，返回结果"""
-        log.info("Scanner starting", extra={"subnets": self.subnets})
+        log.info("Scanner starting", extra={"subnets": self.subnets, "method": self.discovery_method})
         
         all_ips: set[str] = set()
         for sn in self.subnets:
@@ -221,9 +202,11 @@ class NetworkScanner:
                 
                 # 尝试 SNMP
                 if "snmp" in services:
-                    snmp_info = await snmp_query(ip, self.snmp_community)
-                    if snmp_info:
+                    from .snmp_lldp import get_snmp_sysinfo
+                    snmp_info = await get_snmp_sysinfo(ip, self.snmp_community)
+                    if snmp_info and "error" not in snmp_info:
                         device["name"] = snmp_info.get("sysName", device["name"])
+                        device["vendor"] = snmp_info.get("vendor", device["vendor"])
                         device["snmp_info"] = snmp_info
                 
                 # 推断类型
@@ -233,22 +216,95 @@ class NetworkScanner:
         tasks = [probe_host(ip) for ip in ip_list]
         results = await asyncio.gather(*tasks)
         
+        devices_with_snmp = [d for d in results if d is not None and "snmp_info" in d]
         self._devices = [d for d in results if d is not None]
         
-        log.info("Scan complete", extra={"found": len(self._devices)})
+        log.info("Scan complete", extra={"found": len(self._devices), "snmp_devices": len(devices_with_snmp)})
+        
+        # 如果启用拓扑发现，尝试获取邻居信息
+        if self.discovery_method == "topology" and devices_with_snmp:
+            await self._discover_topology(devices_with_snmp)
         
         return {
             "ok": True,
-            "method": "host-scan",
+            "method": "host-scan" if self.discovery_method == "standard" else "topology-scan",
             "device_count": len(self._devices),
+            "link_count": len(self._links),
             "scanned": len(ip_list),
             "subnets": self.subnets,
             "devices": self._devices,
+            "links": self._links,
             "analysis": (
                 f"扫描完成：检查了 {len(ip_list)} 个 IP，"
                 f"发现 {len(self._devices)} 台设备"
+                f"，生成 {len(self._links)} 条拓扑链路"
             ),
         }
+    
+    async def _discover_topology(self, snmp_devices: list[dict]):
+        """从 SNMP 设备获取邻居信息，构建拓扑关系"""
+        from .snmp_lldp import get_lldp_neighbors_snmp, get_cdp_neighbors_snmp
+        
+        all_neighbors = []
+        
+        for device in snmp_devices:
+            ip = device["ip"]
+            vendor = device.get("vendor", "unknown")
+            
+            try:
+                # 根据厂商选择邻居发现协议
+                if vendor == "cisco":
+                    # 思科设备优先使用 CDP
+                    neighbors = await get_cdp_neighbors_snmp(ip, self.snmp_community)
+                    if not neighbors:
+                        # CDP 失败则尝试 LLDP
+                        neighbors = await get_lldp_neighbors_snmp(ip, self.snmp_community)
+                else:
+                    # 其他厂商使用 LLDP
+                    neighbors = await get_lldp_neighbors_snmp(ip, self.snmp_community)
+                
+                for neighbor in neighbors:
+                    neighbor["source_device"] = device.get("name", ip)
+                    neighbor["source_ip"] = ip
+                    all_neighbors.append(neighbor)
+                    
+            except Exception as e:
+                log.warning(f"Failed to get neighbors from {ip}: {e}")
+        
+        # 构建链路关系
+        self._links = self._build_links(all_neighbors)
+    
+    def _build_links(self, neighbors: list[dict]) -> list[dict]:
+        """从邻居信息构建拓扑链路"""
+        links = []
+        
+        for neighbor in neighbors:
+            # 确定远程设备信息
+            remote_name = neighbor.get("remote_name", "unknown")
+            remote_ip = neighbor.get("remote_ip", "")
+            remote_port = neighbor.get("remote_port", "unknown")
+            
+            # 如果远程设备不在已发现设备列表中，添加为未知设备
+            if remote_ip and not any(d["ip"] == remote_ip for d in self._devices):
+                self._devices.append({
+                    "ip": remote_ip,
+                    "name": remote_name,
+                    "vendor": "unknown",
+                    "type": "unknown",
+                    "status": "discovered-via-neighbor",
+                })
+            
+            # 创建链路
+            link = {
+                "source": neighbor.get("source_device", "unknown"),
+                "source_port": neighbor.get("local_port", "unknown"),
+                "target": remote_name,
+                "target_port": remote_port,
+                "confirmed": True,  # 从协议获取，确认度高
+            }
+            links.append(link)
+        
+        return links
     
     @staticmethod
     def _infer_type(vendor: str, services: dict) -> str:

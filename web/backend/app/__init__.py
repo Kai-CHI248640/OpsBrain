@@ -4,8 +4,9 @@ OpsBrain Web — FastAPI Application
 单 Agent 架构 + 工具分组
 """
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from .routes.auth import auth_router
 from .routes.dashboard import dashboard_router
@@ -17,6 +18,9 @@ from .routes.agents import agents_router
 from .routes.feishu import feishu_router
 from .routes.agent import agent_router
 from .routes.subagents import subagent_router
+from .routes.workflow import workflow_router
+from .routes.task import task_router
+from .utils.response import AppException
 
 app = FastAPI(
     title="OpsBrain",
@@ -46,6 +50,24 @@ app.include_router(agents_router, prefix=f"{PREFIX}/agents", tags=["Agent 配置
 app.include_router(feishu_router, prefix=f"{PREFIX}/feishu", tags=["飞书"])
 app.include_router(agent_router, prefix=f"{PREFIX}/agent", tags=["AI Agent"])
 app.include_router(subagent_router, prefix=f"{PREFIX}/subagents", tags=["Subagent (兼容)"])
+app.include_router(workflow_router, prefix=f"{PREFIX}/workflows", tags=["工作流"])
+app.include_router(task_router, prefix=f"{PREFIX}/tasks", tags=["定时任务"])
+
+
+@app.exception_handler(AppException)
+async def app_exception_handler(request: Request, exc: AppException):
+    return JSONResponse(
+        {"ok": False, "error": exc.detail},
+        status_code=exc.status_code,
+    )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        {"ok": False, "error": str(exc)},
+        status_code=500,
+    )
 
 
 @app.on_event("startup")

@@ -363,3 +363,152 @@ class AgentConfig(Base):
             "is_enabled": self.is_enabled,
             "auto_start": self.auto_start,
         }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Workflow（工作流编排，参考 ITOps Agent Platform）
+# ═══════════════════════════════════════════════════════════════════════════
+
+class Workflow(Base):
+    """工作流定义 — 可视化编排多个 Agent 协同工作"""
+    __tablename__ = "workflows"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="")
+    nodes: Mapped[str] = mapped_column(Text, default="[]")
+    edges: Mapped[str] = mapped_column(Text, default="[]")
+    agent_configs: Mapped[str] = mapped_column(Text, default="{}")
+    is_template: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
+
+    def to_dict(self) -> dict:
+        import json as _json
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "nodes": _json.loads(self.nodes) if self.nodes else [],
+            "edges": _json.loads(self.edges) if self.edges else [],
+            "agent_configs": _json.loads(self.agent_configs) if self.agent_configs else {},
+            "is_template": self.is_template,
+            "is_enabled": self.is_enabled,
+            "created_at": self.created_at.isoformat() if self.created_at else "",
+            "updated_at": self.updated_at.isoformat() if self.updated_at else "",
+        }
+
+
+class WorkflowExecution(Base):
+    """工作流执行记录"""
+    __tablename__ = "workflow_executions"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    workflow_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    workflow_name: Mapped[str] = mapped_column(String(256), default="")
+    status: Mapped[str] = mapped_column(String(32), default="pending")
+    # pending | running | completed | failed | paused
+    start_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    end_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    execution_order: Mapped[str] = mapped_column(Text, default="[]")
+    node_results: Mapped[str] = mapped_column(Text, default="{}")
+    initial_input: Mapped[str] = mapped_column(Text, default="")
+    current_node_index: Mapped[int] = mapped_column(Integer, default=0)
+    error_message: Mapped[str] = mapped_column(Text, default="")
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
+
+    def to_dict(self) -> dict:
+        import json as _json
+        return {
+            "id": self.id,
+            "workflow_id": self.workflow_id,
+            "workflow_name": self.workflow_name,
+            "status": self.status,
+            "start_time": self.start_time.isoformat() if self.start_time else "",
+            "end_time": self.end_time.isoformat() if self.end_time else "",
+            "execution_order": _json.loads(self.execution_order) if self.execution_order else [],
+            "node_results": _json.loads(self.node_results) if self.node_results else {},
+            "initial_input": self.initial_input,
+            "current_node_index": self.current_node_index,
+            "error_message": self.error_message,
+            "created_at": self.created_at.isoformat() if self.created_at else "",
+            "updated_at": self.updated_at.isoformat() if self.updated_at else "",
+        }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Scheduled Task（定时任务）
+# ═══════════════════════════════════════════════════════════════════════════
+
+class ScheduledTask(Base):
+    """定时任务定义 — 替换原工作流功能"""
+    __tablename__ = "scheduled_tasks"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    name: Mapped[str] = mapped_column(String(50), nullable=False)
+    target_agent_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    target_agent_name: Mapped[str] = mapped_column(String(128), default="")
+    task_content: Mapped[str] = mapped_column(Text, default="")
+    start_time: Mapped[str] = mapped_column(String(32), default="")
+    time_config: Mapped[str] = mapped_column(Text, default="{}")
+    time_mode: Mapped[str] = mapped_column(String(16), default="simple")
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_executed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    execution_count: Mapped[int] = mapped_column(Integer, default=0)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
+
+    def to_dict(self) -> dict:
+        import json as _json
+        return {
+            "id": self.id,
+            "name": self.name,
+            "target_agent_id": self.target_agent_id,
+            "target_agent_name": self.target_agent_name,
+            "task_content": self.task_content,
+            "start_time": self.start_time,
+            "time_config": _json.loads(self.time_config) if self.time_config else {},
+            "time_mode": self.time_mode,
+            "is_enabled": self.is_enabled,
+            "last_executed_at": self.last_executed_at.isoformat() if self.last_executed_at else "",
+            "execution_count": self.execution_count,
+            "created_at": self.created_at.isoformat() if self.created_at else "",
+            "updated_at": self.updated_at.isoformat() if self.updated_at else "",
+        }
+
+
+class TaskExecutionLog(Base):
+    """定时任务执行日志"""
+    __tablename__ = "task_execution_logs"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    task_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    task_name: Mapped[str] = mapped_column(String(50), default="")
+    target_agent_id: Mapped[str] = mapped_column(String(32), default="")
+    target_agent_name: Mapped[str] = mapped_column(String(128), default="")
+    task_content: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(32), default="running")
+    # running | completed | failed
+    error_message: Mapped[str] = mapped_column(Text, default="")
+    execution_time: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "task_id": self.task_id,
+            "task_name": self.task_name,
+            "target_agent_id": self.target_agent_id,
+            "target_agent_name": self.target_agent_name,
+            "task_content": self.task_content,
+            "status": self.status,
+            "error_message": self.error_message,
+            "execution_time": self.execution_time.isoformat() if self.execution_time else "",
+            "created_at": self.created_at.isoformat() if self.created_at else "",
+        }

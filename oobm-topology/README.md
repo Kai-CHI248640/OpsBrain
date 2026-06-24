@@ -2,7 +2,7 @@
 
 通过串口服务器 **自动发现企业网络拓扑**，无需登录每一台设备。
 
-[![Docker](https://img.shields.io/badge/Docker-Containerized-blue?logo=docker)](https://docs.docker.com/compose/)
+
 [![Python](https://img.shields.io/badge/Python-3.12-brightgreen?logo=python)](https://python.org)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
@@ -110,9 +110,6 @@ vi .env
 ### 3. 运行
 
 ```bash
-# 构建镜像
-make build
-
 # 加载设备清单
 make inventory-load
 
@@ -162,6 +159,7 @@ dot -Tpng data/topology/topology.dot -o topology.png  # 渲染为图片
 | `collect` | 仅采集，不构建拓扑 | 分步调试 |
 | `topology` | 仅基于已有采集数据构建拓扑 | 重新出图 |
 | `incremental` | 增量：只采新设备 + 拓扑对比 | 日常巡检 |
+| `snmp` (Web) | 基于 SNMP/LLDP/CDP 发现 | 已配置 SNMP 的企业网络 |
 
 ---
 
@@ -173,11 +171,11 @@ dot -Tpng data/topology/topology.dot -o topology.png  # 渲染为图片
 | 配置管理 | pydantic-settings | 12-Factor，env 优先可覆盖 |
 | CLI 输出解析 | TextFSM + 正则回退 | 行业标准，netdevops 生态成熟 |
 | 并发模型 | threading.WorkerPool | 串口是阻塞 I/O，同步线程合理 |
-| 日志格式 | JSON stdout | Docker 标准，可 log aggregation |
+| 日志格式 | JSON stdout | 标准输出，可重定向 |
 | 链路确认 | 双向匹配 | LLDP 有向 → 无向确认，防假链路 |
 | 等待机制 | 多轮收敛 | LLDP 可能发现新设备 |
 | 持久化 | JSON 文件 | 简单可靠，无需数据库 |
-| 部署 | Docker Compose | 单机足够，复杂度低 |
+| 部署 | 本地 Python 环境 | 单机足够，复杂度低 |
 
 ---
 
@@ -185,7 +183,6 @@ dot -Tpng data/topology/topology.dot -o topology.png  # 渲染为图片
 
 - **只读操作**：只执行 `show/display` 命令，不写配置
 - **密码管理**：支持环境变量引用 `${VAR_NAME}`，不强制 Excel 明文
-- **网络隔离**：采集器通过单独网桥连接串口服务器
 - **会话隔离**：每台设备独立 SSH 连接，完成后断开
 
 ---

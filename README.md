@@ -113,6 +113,22 @@ opsbrain/
 
 ## Changelog
 
+### v3.0.2 (2026-06-17)
+
+**SNMP/LLDP/CDP 拓扑发现集成 + 工作流功能**
+
+- 新增 `/api/v1/topology/snmp-discover` 接口，支持基于 SNMP 的拓扑发现
+- 集成 LLDP 和 CDP 协议支持，可用于企业内网设备发现
+- 新增 `scanner/snmp_lldp.py` 模块，封装 SNMP 查询逻辑
+- 支持递归发现（最大深度可配置）
+- 自动创建 Subagent 绑定到发现的拓扑
+- **工作流功能**: 参考 ITOps Agent Platform 实现可视化工作流编排
+  - 后端: Workflow/WorkflowExecution 模型 + CRUD API + 执行引擎
+  - 前端: 工作流列表页 + 可视化流程设计器 (拖拽式)
+  - 支持节点类型: Agent/条件/延迟/开始/结束
+  - 支持工作流模板、导入导出、执行记录查看
+  - 左侧导航新增"工作流"入口
+
 ### v3.0.1 (2026-06-14)
 
 **Cross-platform compatibility + Scan optimization + Init fixes**

@@ -1,55 +1,6 @@
-/**
- * OpsBrain Web — API Client
- *
- * 动态计算 API Base URL：
- *   - 生产: 当前路径前缀 + /api/v1 (如 /opsbrain/api/v1)
- *   - 开发: vite proxy → /api/v1
- *
- * 自动附加 JWT 认证、处理 401 跳登录。
- */
-
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import axios from 'axios'
-
-// ── 动态 API Base ─────────────────────────────────────────────────────────
-function getApiBase() {
-  const path = window.location.pathname.replace(/\/+$/, '')
-  // 取第一个路径段作为部署前缀（如 /opsbrain），开发环境取空
-  const parts = path.split('/').filter(Boolean)
-  const prefix = parts.length > 0 ? '/' + parts[0] : ''
-  return `${prefix}/api/v1`
-}
-
-const api = axios.create({
-  baseURL: getApiBase(),
-  timeout: 30000,
-  headers: { 'Content-Type': 'application/json' },
-})
-
-// ── 请求拦截器：JWT ────────────────────────────────────────────────────
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('opsbrain-token')
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
-  }
-  return config
-})
-
-// ── 响应拦截器：401 → 登录 ────────────────────────────────────────────
-api.interceptors.response.use(
-  (res) => res,
-  (err) => {
-    if (err.response?.status === 401) {
-      localStorage.removeItem('opsbrain-token')
-      localStorage.removeItem('opsbrain-user')
-      window.location.hash = '#/login'
-    }
-    return Promise.reject(err)
-  },
-)
-
-// ── Auth Store ───────────────────────────────────────────────────────────
+import { api } from '@/api'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(loadUser())
@@ -74,14 +25,13 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function fetchUser() {
     const res = await api.get('/auth/me')
-    user.value = res.data
-    saveUser(res.data)
-    return res.data
+    user.value = res.user || res
+    saveUser(user.value)
+    return user.value
   }
 
   async function login(username, password) {
-    const res = await api.post('/auth/login', { username, password })
-    const data = res.data
+    const data = await api.post('/auth/login', { username, password })
     localStorage.setItem('opsbrain-token', data.access_token)
     user.value = data.user
     saveUser(data.user)
@@ -89,12 +39,11 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function setup(username, password, displayName) {
-    const res = await api.post('/auth/setup', {
+    const data = await api.post('/auth/setup', {
       username,
       password,
       display_name: displayName,
     })
-    const data = res.data
     localStorage.setItem('opsbrain-token', data.access_token)
     user.value = data.user
     saveUser(data.user)

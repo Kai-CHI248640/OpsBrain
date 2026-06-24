@@ -18,10 +18,15 @@
           <el-icon><Monitor /></el-icon>
           <template #title>控制台</template>
         </el-menu-item>
-        <el-menu-item index="/topology">
-          <el-icon><Connection /></el-icon>
-          <template #title>网络拓扑</template>
-        </el-menu-item>
+        <el-sub-menu index="/topology">
+          <template #title>
+            <el-icon><Connection /></el-icon>
+            <span>网络拓扑</span>
+          </template>
+          <el-menu-item index="/topology">拓扑列表</el-menu-item>
+          <el-menu-item index="/topology/wizard">拓扑嗅探</el-menu-item>
+          <el-menu-item index="/topology/tasks">定时任务</el-menu-item>
+        </el-sub-menu>
         <el-menu-item index="/knowledge">
           <el-icon><Collection /></el-icon>
           <template #title>知识库</template>

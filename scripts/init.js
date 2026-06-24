@@ -104,6 +104,7 @@ function resetDatabase() {
     try {
       fs.unlinkSync(dbPath);
       console.log('✅ 已删除数据库文件，项目将重新初始化');
+      console.log('⚠️  请清除浏览器缓存和 localStorage（按 F12 → Application → Local Storage → 删除 opsbrain-token 和 opsbrain-user）');
     } catch (e) {
       if (e.code === 'EBUSY') {
         console.error('❌ 数据库被占用，请先停止后端');

@@ -176,14 +176,38 @@ def get_gateway_ip() -> str | None:
 
 
 def _subnets_windows() -> list[str]:
+    """Detect subnets, prioritizing the LAN adapter (one with a gateway)."""
+    import subprocess
+    # Step 1: Find the gateway's subnet to prioritize LAN
+    gw = get_gateway_ip()
+    lan_subnet = None
+    if gw:
+        try:
+            lan_subnet = str(ipaddress.IPv4Network(f"{gw}/24", strict=False))
+        except ValueError:
+            pass
+
+    # Step 2: Collect all subnets from adapters
     subnets = []
     try:
         for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
             ip = info[4][0]
             if ip.startswith("127."):
                 continue
-            # 过滤掉VPN和虚拟网卡的IP
-            if ip.startswith("198.18.") or ip.startswith("172.21."):
+            # Filter out known virtual/private adapter ranges that are NOT real LAN
+            # VPN/WARP
+            if ip.startswith("198.18."):
+                continue
+            # 172.16-31.x.x virtual adapters (WSL2, Hyper-V, Docker)
+            # These are typically virtual; real corporate 172.x LANs will be caught via gateway check
+            if ip.startswith("172.16.") or ip.startswith("172.17.") or \
+               ip.startswith("172.18.") or ip.startswith("172.19.") or \
+               ip.startswith("172.20.") or ip.startswith("172.21.") or \
+               ip.startswith("172.22.") or ip.startswith("172.23.") or \
+               ip.startswith("172.24.") or ip.startswith("172.25.") or \
+               ip.startswith("172.26.") or ip.startswith("172.27.") or \
+               ip.startswith("172.28.") or ip.startswith("172.29.") or \
+               ip.startswith("172.30.") or ip.startswith("172.31."):
                 continue
             try:
                 net = ipaddress.IPv4Network(f"{ip}/24", strict=False)
@@ -192,6 +216,14 @@ def _subnets_windows() -> list[str]:
                 pass
     except Exception:
         pass
+
+    # Step 3: If gateway subnet found, put it first
+    if lan_subnet and lan_subnet in subnets:
+        subnets.remove(lan_subnet)
+        subnets.insert(0, lan_subnet)
+    elif lan_subnet:
+        subnets.insert(0, lan_subnet)
+
     if not subnets:
         subnets = _fallback_subnets()
     return list(dict.fromkeys(subnets))

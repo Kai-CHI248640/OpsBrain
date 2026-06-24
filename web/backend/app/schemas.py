@@ -203,3 +203,55 @@ class QRPollRequest(BaseModel):
 
 class ThemeUpdate(BaseModel):
     theme: str = Field(..., pattern=r"^(light|dark)$")
+
+
+# ── Scheduled Task ──────────────────────────────────────────────────────────
+
+class ScheduledTaskCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=50)
+    target_agent_id: str = Field(..., min_length=1, max_length=32)
+    target_agent_name: str = Field(default="", max_length=128)
+    task_content: str = Field(default="", max_length=65536)
+    start_time: str = Field(default="", max_length=32)
+    time_config: dict = Field(default_factory=dict)
+    time_mode: str = Field(default="simple", pattern=r"^(simple|advanced)$")
+
+
+class ScheduledTaskUpdate(BaseModel):
+    name: Optional[str] = None
+    target_agent_id: Optional[str] = None
+    target_agent_name: Optional[str] = None
+    task_content: Optional[str] = None
+    start_time: Optional[str] = None
+    time_config: Optional[dict] = None
+    time_mode: Optional[str] = None
+    is_enabled: Optional[bool] = None
+
+
+class ScheduledTaskResponse(BaseModel):
+    id: str
+    name: str
+    target_agent_id: str
+    target_agent_name: str
+    task_content: str
+    start_time: str
+    time_config: dict
+    time_mode: str
+    is_enabled: bool
+    last_executed_at: str
+    execution_count: int
+    created_at: str
+    updated_at: str
+
+
+class TaskExecutionLogResponse(BaseModel):
+    id: str
+    task_id: str
+    task_name: str
+    target_agent_id: str
+    target_agent_name: str
+    task_content: str
+    status: str
+    error_message: str
+    execution_time: str
+    created_at: str

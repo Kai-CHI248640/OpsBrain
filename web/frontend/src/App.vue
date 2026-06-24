@@ -23,7 +23,7 @@ onMounted(async () => {
     let needsSetup = false
     try {
       const resp = await api.get('/auth/setup-required')
-      needsSetup = resp.data.setup_required
+      needsSetup = resp.setup_required
     } catch {
       // API 不可达 — 可能后端还没起
       needsSetup = false

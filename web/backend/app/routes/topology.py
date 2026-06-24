@@ -9,13 +9,15 @@ from __future__ import annotations
 import json as _json
 import os
 from datetime import datetime
+from typing import Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
 
 from ..auth import get_current_user
 from ..database import async_session
 from ..models import User, TopologySave, Subagent, ApiKey
+from ..services.topology_service import TopologyService
+from ..utils.response import ApiResponse, NotFoundException
 from .dashboard import get_network_runtime_data
 
 from logging_setup import get_logger
@@ -28,141 +30,66 @@ def _now() -> datetime:
     return datetime.utcnow()
 
 
+def _detect_local_subnets() -> list[str]:
+    from platform_info import detect_local_subnets
+    return detect_local_subnets()
+
+
 @topology_router.get("/")
 async def list_topologies(user: User = Depends(get_current_user)):
     """列出所有已保存的拓扑"""
     async with async_session() as session:
-        result = await session.execute(
-            select(TopologySave).order_by(TopologySave.updated_at.desc())
-        )
-        topologies = result.scalars().all()
-    return {"topologies": [t.to_dict() for t in topologies]}
+        service = TopologyService(session)
+        topologies = await service.list_topologies()
+    return ApiResponse.success(topologies, "查询成功")
 
 
 @topology_router.post("/")
-async def save_topology(data: dict, user: User = Depends(get_current_user)):
+async def save_topology(data: Dict[str, Any], user: User = Depends(get_current_user)):
     """保存拓扑，并自动创建绑定的 Subagent"""
-    name = data.get("name", "").strip()
-    if not name:
-        async with async_session() as session:
-            result = await session.execute(select(TopologySave))
-            existing = len(result.scalars().all())
-        name = f"Topology{existing + 1}"
-
     async with async_session() as session:
-        topo = TopologySave(
-            name=name,
-            discovery_method=data.get("discovery_method", "lan"),
-            device_count=data.get("device_count", 0),
-            link_count=data.get("link_count", 0),
-            device_data=_json.dumps(data.get("device_data", [])),
-            link_data=_json.dumps(data.get("link_data", [])),
-            analysis=data.get("analysis", ""),
-            mermaid_code=data.get("mermaid_code", ""),
-        )
-        session.add(topo)
-        await session.flush()
-
-        # ── 自动创建 Subagent 绑定到此拓扑 ──
-        # 使用第一个可用的 API Key
-        api_result = await session.execute(
-            select(ApiKey).where(ApiKey.is_active == True).order_by(ApiKey.is_default.desc())
-        )
-        default_api = api_result.scalar_one_or_none()
-
-        subagent = Subagent(
-            topology_id=topo.id,
-            name=f"Agent-{name}",
-            status="idle",
-            api_key_id=default_api.id if default_api else "",
-            message_count=0,
-        )
-        session.add(subagent)
-        await session.flush()
-
-        topo.subagent_id = subagent.id
-        await session.commit()
-        await session.refresh(topo)
-
+        service = TopologyService(session)
+        result = await service.create_topology(data)
     log.info("Topology saved with subagent",
-             extra={"name": name, "id": topo.id, "subagent_id": topo.subagent_id})
-    return topo.to_dict()
+             extra={"name": result["name"], "id": result["id"], "subagent_id": result["subagent_id"]})
+    return ApiResponse.success(result, "保存成功")
 
 
 @topology_router.get("/{topo_id}")
 async def get_topology(topo_id: str, user: User = Depends(get_current_user)):
     """获取单个拓扑详情"""
     async with async_session() as session:
-        result = await session.execute(
-            select(TopologySave).where(TopologySave.id == topo_id)
-        )
-        topo = result.scalar_one_or_none()
+        service = TopologyService(session)
+        topo = await service.get_topology(topo_id)
     if not topo:
-        raise HTTPException(status_code=404, detail="Topology not found")
-    return topo.to_dict()
+        raise NotFoundException("拓扑不存在")
+    return ApiResponse.success(topo, "查询成功")
 
 
 @topology_router.put("/{topo_id}")
-async def update_topology(topo_id: str, data: dict, user: User = Depends(get_current_user)):
+async def update_topology(topo_id: str, data: Dict[str, Any], user: User = Depends(get_current_user)):
     """更新拓扑（名称、设备数据等）"""
     async with async_session() as session:
-        result = await session.execute(
-            select(TopologySave).where(TopologySave.id == topo_id)
-        )
-        topo = result.scalar_one_or_none()
-        if not topo:
-            raise HTTPException(status_code=404, detail="Topology not found")
-
-        if "name" in data:
-            topo.name = data["name"]
-        if "device_data" in data:
-            topo.device_data = _json.dumps(data["device_data"])
-            topo.device_count = len(data["device_data"])
-        if "link_data" in data:
-            topo.link_data = _json.dumps(data["link_data"])
-            topo.link_count = len(data["link_data"])
-
-        topo.updated_at = _now()
-        await session.commit()
-        await session.refresh(topo)
-
-    return topo.to_dict()
+        service = TopologyService(session)
+        result = await service.update_topology(topo_id, data)
+    if not result:
+        raise NotFoundException("拓扑不存在")
+    return ApiResponse.success(result, "更新成功")
 
 
 @topology_router.delete("/{topo_id}")
 async def delete_topology(topo_id: str, user: User = Depends(get_current_user)):
     """删除拓扑及绑定的 Subagent"""
     async with async_session() as session:
-        result = await session.execute(
-            select(TopologySave).where(TopologySave.id == topo_id)
-        )
-        topo = result.scalar_one_or_none()
-        if not topo:
-            raise HTTPException(status_code=404, detail="Topology not found")
+        service = TopologyService(session)
+        success = await service.delete_topology(topo_id)
+    if not success:
+        raise NotFoundException("拓扑不存在")
 
-        # 同时删除绑定的 Subagent
-        if topo.subagent_id:
-            sub_result = await session.execute(
-                select(Subagent).where(Subagent.id == topo.subagent_id)
-            )
-            subagent = sub_result.scalar_one_or_none()
-            if subagent:
-                await session.delete(subagent)
-
-        await session.delete(topo)
-        await session.commit()
-
-    # 重置 Agent 记忆
     from .agent import _save_mem
     _save_mem("agent", [])
 
-    return {"message": "Topology and bound subagent deleted, Agent memory reset", "id": topo_id}
-
-
-def _detect_local_subnets() -> list[str]:
-    """自动检测本机所有网卡上的子网段"""
-    from platform_info import detect_local_subnets
-    return detect_local_subnets()
+    return ApiResponse.success({"id": topo_id}, "删除成功")
 
 
 @topology_router.post("/discover")
@@ -177,7 +104,6 @@ async def run_discovery(data: dict):
         import subprocess, ipaddress, socket, asyncio as _aio
         from platform_info import get_gateway_ip
 
-        # ── 检测子网 ──
         target_subnets: list[str] = []
         if target:
             try:
@@ -189,7 +115,6 @@ async def run_discovery(data: dict):
             target_subnets = _detect_local_subnets() or [
                 "10.0.0.0/24", "172.16.0.0/24", "192.168.0.0/24", "192.168.1.0/24"]
 
-        # ── 生成主机列表 ──
         hosts: list[str] = []
         for subnet_str in target_subnets[:3]:
             try:
@@ -208,7 +133,6 @@ async def run_discovery(data: dict):
         if gw and gw not in hosts:
             hosts.insert(0, gw)
 
-        # ── 批量 ping（在独立线程中运行，不阻塞事件循环） ──
         def _batch_ping(ip_list: list[str]) -> list[str]:
             from concurrent.futures import ThreadPoolExecutor, as_completed
             def _ping_one(ip: str) -> str | None:
@@ -233,7 +157,6 @@ async def run_discovery(data: dict):
         online_ips = await loop.run_in_executor(None, _batch_ping, hosts)
         log.info(f"Ping完成，在线: {len(online_ips)}, IPs: {online_ips[:10]}")
 
-        # ── 对在线IP做TCP端口扫描 ──
         devices: list[dict] = []
         for ip in online_ips:
             open_ports = {}
@@ -265,7 +188,6 @@ async def run_discovery(data: dict):
 
         log.info(f"扫描完成，发现 {len(devices)} 台设备")
 
-        # ── 生成拓扑连线（星形：所有设备连网关） ──
         links = []
         gw_ip = gw or ""
         gw_dev = None
@@ -294,7 +216,6 @@ async def run_discovery(data: dict):
                     "confirmed": False,
                 })
 
-        # 深度嗅探：尝试 SSH 获取设备信息
         runtime = get_network_runtime_data()
 
         if devices and password:
@@ -332,44 +253,25 @@ async def run_discovery(data: dict):
         if runtime.get("warning"):
             analysis += f"。提示：{runtime['warning']}"
 
-        # 拓扑名不再直接用 target 网段
-        from datetime import datetime
         timestamp = datetime.now().strftime("%Y%m%d-%H%M")
         name = data.get("name", "") or f"{method}-发现-{timestamp}"
 
         async with async_session() as session:
-            topo = TopologySave(
-                name=name,
-                discovery_method=method,
-                device_count=len(devices),
-                link_count=len(links),
-                device_data=_json.dumps(devices),
-                link_data=_json.dumps(links),
-                analysis=analysis,
-                mermaid_code="",
-            )
-            session.add(topo)
-            await session.flush()
+            service = TopologyService(session)
+            topo_data = {
+                "name": name,
+                "discovery_method": method,
+                "device_count": len(devices),
+                "link_count": len(links),
+                "device_data": devices,
+                "link_data": links,
+                "analysis": analysis,
+                "mermaid_code": "",
+            }
+            result = await service.create_topology(topo_data)
 
-            api_result = await session.execute(
-                select(ApiKey).where(ApiKey.is_active == True).order_by(ApiKey.is_default.desc())
-            )
-            default_api = api_result.scalar_one_or_none()
-            subagent = Subagent(
-                topology_id=topo.id,
-                name=f"Agent-{name}",
-                status="idle",
-                api_key_id=default_api.id if default_api else "",
-                message_count=0,
-            )
-            session.add(subagent)
-            await session.flush()
-            topo.subagent_id = subagent.id
-            await session.commit()
-
-        return {
-            "ok": True,
-            "topo_id": topo.id[:8],
+        return ApiResponse.success({
+            "topo_id": result["id"][:8],
             "name": name,
             "device_count": len(devices),
             "link_count": len(links),
@@ -377,14 +279,11 @@ async def run_discovery(data: dict):
             "analysis": analysis,
             "devices": [{"name": d.get("name","?"), "type": d.get("type","?"),
                          "ip": d.get("ip","?"), "vendor": d.get("vendor","?")} for d in devices[:10]],
-        }
+        }, "发现成功")
     except ImportError as ie:
-        return {
-            "ok": False,
-            "error": f"缺少依赖模块: {ie}。请确认容器已安装所需 Python 包。",
-        }
+        return ApiResponse.error(f"缺少依赖模块: {ie}。请确认容器已安装所需 Python 包。")
     except Exception as e:
-        return {"ok": False, "error": f"嗅探失败: {str(e)}"}
+        return ApiResponse.error(f"嗅探失败: {str(e)}")
 
 
 @topology_router.post("/discover-seed")
@@ -395,7 +294,7 @@ async def run_seed_discovery(data: dict):
     max_depth = data.get("max_depth", 5)
 
     if not seeds:
-        return {"ok": False, "error": "至少需要一台种子设备"}
+        return ApiResponse.error("至少需要一台种子设备")
 
     try:
         from ..discovery.seed import SeedDiscovery
@@ -408,43 +307,26 @@ async def run_seed_discovery(data: dict):
         )
         result = await engine.run()
 
-        # 保存到数据库
         async with async_session() as session:
-            topo = TopologySave(
-                name=data.get("name", "") or f"种子发现-{datetime.now().strftime('%Y%m%d-%H%M')}",
-                discovery_method="seed",
-                device_count=result["device_count"],
-                link_count=result["link_count"],
-                device_data=_json.dumps(result["devices"]),
-                link_data=_json.dumps(result["links"]),
-                analysis=result.get("analysis", ""),
-                mermaid_code=result.get("mermaid_code", ""),
-            )
-            session.add(topo)
-            await session.flush()
+            service = TopologyService(session)
+            topo_data = {
+                "name": data.get("name", "") or f"种子发现-{datetime.now().strftime('%Y%m%d-%H%M')}",
+                "discovery_method": "seed",
+                "device_count": result["device_count"],
+                "link_count": result["link_count"],
+                "device_data": result["devices"],
+                "link_data": result["links"],
+                "analysis": result.get("analysis", ""),
+                "mermaid_code": result.get("mermaid_code", ""),
+            }
+            topo = await service.create_topology(topo_data)
 
-            api_result = await session.execute(
-                select(ApiKey).where(ApiKey.is_active == True).order_by(ApiKey.is_default.desc())
-            )
-            default_api = api_result.scalar_one_or_none()
-            subagent = Subagent(
-                topology_id=topo.id,
-                name=f"Agent-{topo.name}",
-                status="idle",
-                api_key_id=default_api.id if default_api else "",
-                message_count=0,
-            )
-            session.add(subagent)
-            await session.flush()
-            topo.subagent_id = subagent.id
-            await session.commit()
-
-        result["topo_id"] = topo.id[:8]
-        return result
+        result["topo_id"] = topo["id"][:8]
+        return ApiResponse.success(result, "发现成功")
 
     except Exception as e:
         log.error("Seed discovery failed", extra={"error": str(e)})
-        return {"ok": False, "error": f"种子发现失败: {str(e)}"}
+        return ApiResponse.error(f"种子发现失败: {str(e)}")
 
 
 @topology_router.post("/scan")
@@ -453,10 +335,10 @@ async def run_network_scan(data: dict):
     subnets = data.get("subnets", [])
     max_hosts = data.get("max_hosts", 256)
     snmp_community = data.get("snmp_community", "public")
-    
+
     try:
         from ..scanner.scanner import NetworkScanner
-        
+
         scanner = NetworkScanner(
             subnets=subnets or None,
             max_hosts=max_hosts,
@@ -467,28 +349,116 @@ async def run_network_scan(data: dict):
         result["runtime"] = runtime
         if runtime.get("warning"):
             result["analysis"] = f"{result.get('analysis', '')}。提示：{runtime['warning']}"
-        
-        # 保存
+
         async with async_session() as session:
-            topo = TopologySave(
-                name=data.get("name", "") or f"网络嗅探-{datetime.now().strftime('%Y%m%d-%H%M')}",
-                discovery_method="scan",
-                device_count=result["device_count"],
-                link_count=0,
-                device_data=_json.dumps(result.get("devices", [])),
-                link_data=_json.dumps([]),
-                analysis=result.get("analysis", ""),
-                mermaid_code="",
-            )
-            session.add(topo)
-            await session.flush()
-            topo.subagent_id = ""
-            await session.commit()
-        
-        return result
+            service = TopologyService(session)
+            topo_data = {
+                "name": data.get("name", "") or f"网络嗅探-{datetime.now().strftime('%Y%m%d-%H%M')}",
+                "discovery_method": "scan",
+                "device_count": result["device_count"],
+                "link_count": 0,
+                "device_data": result.get("devices", []),
+                "link_data": [],
+                "analysis": result.get("analysis", ""),
+                "mermaid_code": "",
+            }
+            await service.create_topology(topo_data)
+
+        return ApiResponse.success(result, "扫描成功")
     except Exception as e:
         log.error("Scan failed", extra={"error": str(e)})
-        return {"ok": False, "error": f"网络嗅探失败: {str(e)}"}
+        return ApiResponse.error(f"网络嗅探失败: {str(e)}")
+
+
+@topology_router.post("/snmp-discover")
+async def run_snmp_discovery(data: dict):
+    """基于 SNMP/LLDP/CDP 的拓扑发现（类似 WeOps Topology-Scanner）"""
+    target_ips = data.get("targets", [])
+    snmp_community = data.get("snmp_community", "public")
+    max_depth = data.get("max_depth", 3)
+
+    if not target_ips:
+        return ApiResponse.error("至少需要一台目标设备 IP")
+
+    try:
+        from ..scanner.snmp_lldp import query_device_lldp, get_cdp_neighbors_snmp
+
+        discovered_devices = {}
+        links = []
+        queue = [(ip, 0) for ip in target_ips]
+        visited = set()
+
+        while queue:
+            current_ip, depth = queue.pop(0)
+
+            if current_ip in visited or depth > max_depth:
+                continue
+            visited.add(current_ip)
+
+            device_info = await query_device_lldp(current_ip, snmp_community)
+
+            if "error" in device_info:
+                log.warning(f"Failed to query {current_ip}: {device_info['error']}")
+                continue
+
+            discovered_devices[current_ip] = device_info
+
+            for neighbor in device_info.get("neighbors", []):
+                remote_ip = neighbor.get("remote_ip", "")
+                remote_name = neighbor.get("remote_name", "")
+
+                if not remote_ip and remote_name:
+                    try:
+                        remote_ip = socket.gethostbyname(remote_name)
+                    except:
+                        pass
+
+                if remote_ip and remote_ip not in visited:
+                    queue.append((remote_ip, depth + 1))
+
+                links.append({
+                    "source": current_ip,
+                    "target": remote_ip or remote_name,
+                    "source_port": neighbor.get("local_port", ""),
+                    "target_port": neighbor.get("remote_port", ""),
+                    "confirmed": True,
+                })
+
+        devices = []
+        for ip, info in discovered_devices.items():
+            devices.append({
+                "name": info.get("name", ip),
+                "ip": ip,
+                "type": "switch",
+                "vendor": info.get("vendor", "unknown"),
+                "status": "online",
+            })
+
+        async with async_session() as session:
+            service = TopologyService(session)
+            topo_data = {
+                "name": data.get("name", "") or f"SNMP发现-{datetime.now().strftime('%Y%m%d-%H%M')}",
+                "discovery_method": "snmp",
+                "device_count": len(devices),
+                "link_count": len(links),
+                "device_data": devices,
+                "link_data": links,
+                "analysis": f"SNMP发现完成：发现 {len(devices)} 台设备，{len(links)} 条链路",
+                "mermaid_code": "",
+            }
+            topo = await service.create_topology(topo_data)
+
+        return ApiResponse.success({
+            "topo_id": topo["id"][:8],
+            "name": topo["name"],
+            "device_count": len(devices),
+            "link_count": len(links),
+            "devices": [{"name": d["name"], "ip": d["ip"], "vendor": d["vendor"]} for d in devices[:10]],
+            "analysis": f"SNMP发现完成：发现 {len(devices)} 台设备，{len(links)} 条链路",
+        }, "发现成功")
+    except Exception as e:
+        log.error("SNMP discovery failed", extra={"error": str(e)})
+        return ApiResponse.error(f"SNMP发现失败: {str(e)}")
 
 
 @topology_router.post("/console-discover")
@@ -497,20 +467,19 @@ async def discover_console_ports(data: dict):
     server_ip = data.get("ip", "")
     start_port = data.get("start", 2001)
     end_port = data.get("end", 2100)
-    
+
     if not server_ip:
-        return {"ok": False, "error": "请输入串口服务器 IP"}
-    
+        return ApiResponse.error("请输入串口服务器 IP")
+
     try:
         from ..scanner.console import auto_discover_ports
         ports = await auto_discover_ports(server_ip, range(start_port, end_port + 1))
-        return {
-            "ok": True,
+        return ApiResponse.success({
             "active_ports": ports,
             "count": len(ports),
-        }
+        }, "发现成功")
     except Exception as e:
-        return {"ok": False, "error": str(e)}
+        return ApiResponse.error(str(e))
 
 
 @topology_router.post("/console-collect")
@@ -519,25 +488,23 @@ async def collect_console_devices(data: dict):
     server_ip = data.get("ip", "")
     brand = data.get("brand", "telnet")
     devices = data.get("devices", [])
-    
+
     if not server_ip:
-        return {"ok": False, "error": "请输入串口服务器 IP"}
+        return ApiResponse.error("请输入串口服务器 IP")
     if not devices:
-        return {"ok": False, "error": "无设备列表"}
-    
+        return ApiResponse.error("无设备列表")
+
     try:
         from ..scanner.console import ConsoleCollector
         collector = ConsoleCollector(server_ip=server_ip, brand=brand)
         results = await collector.collect_all(devices)
-        
-        # 分析采集结果
+
         success = sum(1 for r in results if "error" not in r)
-        return {
-            "ok": True,
+        return ApiResponse.success({
             "total": len(results),
             "success": success,
             "failed": len(results) - success,
             "results": results,
-        }
+        }, "采集完成")
     except Exception as e:
-        return {"ok": False, "error": str(e)}
+        return ApiResponse.error(str(e))
